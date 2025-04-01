@@ -38,12 +38,72 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   const likes = "likes" in note ? note.likes : note.likes || 0;
   const comments = "comments" in note ? note.comments : note.comments || 0;
 
-  // Format content with paragraphs
-  const formattedContent = content.split("\n").map((paragraph, index) => (
-    <p key={index} className="mb-3">
-      {paragraph}
-    </p>
-  ));
+  // Format content with enhanced text processing
+  const formatContent = (text: string) => {
+    // 将制表符转换为换行符，然后按单个换行符分割
+    const processedText = text.replace(/\t/g, "\n");
+    // 使用单个换行符分割，这样可以保留所有空行
+    const paragraphs = processedText.split("\n");
+
+    return paragraphs.map((paragraph, index) => {
+      // 处理链接
+      const processLinks = (text: string) => {
+        return text.replace(
+          /(https?:\/\/[^\s]+)/g,
+          '<a href="$1" class="text-pink-500 hover:text-pink-600 underline" target="_blank" rel="noopener noreferrer">$1</a>'
+        );
+      };
+
+      // 处理标签
+      const processTags = (text: string) => {
+        return text.replace(
+          /#([^#\s]+)/g,
+          '<span class="text-pink-500">#$1</span>'
+        );
+      };
+
+      // 处理@提及
+      const processMentions = (text: string) => {
+        return text.replace(
+          /@([^\s]+)/g,
+          '<span class="text-blue-500">@$1</span>'
+        );
+      };
+
+      // 处理表情符号 - 增加适当的间距
+      const processEmoji = (text: string) => {
+        return text.replace(
+          /([\u{1F300}-\u{1F9FF}])/gu,
+          '<span class="inline-block mx-0.5">$1</span>'
+        );
+      };
+
+      // 应用所有格式化
+      let formattedText = paragraph;
+      formattedText = processLinks(formattedText);
+      formattedText = processTags(formattedText);
+      formattedText = processMentions(formattedText);
+      formattedText = processEmoji(formattedText);
+
+      return (
+        <p
+          key={index}
+          className="leading-relaxed tracking-wide whitespace-pre-wrap"
+          style={{
+            fontFamily:
+              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+            letterSpacing: "0.025em",
+            wordSpacing: "0.05em",
+            minHeight: "1.5em", // 确保空行也有高度
+            marginBottom: "0.5em", // 统一的段落间距
+          }}
+          dangerouslySetInnerHTML={{ __html: formattedText || " " }} // 空行使用空格
+        />
+      );
+    });
+  };
+
+  const formattedContent = formatContent(content);
 
   // Handle lightbox open and close
   const openLightbox = (index: number) => {
@@ -58,7 +118,16 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
       {/* Note Header */}
       <div className="p-4 border-b">
-        <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+        <h3
+          className="text-xl font-semibold text-gray-800 mb-1"
+          style={{
+            fontFamily:
+              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {title}
+        </h3>
         <div className="flex items-center text-sm text-gray-500 mt-2 space-x-4">
           <span className="flex items-center">
             <FiUser className="mr-1" /> {author}
@@ -100,16 +169,22 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
       )}
 
       {/* Content */}
-      <div className="p-4">
-        <div className="text-gray-700 prose max-w-none">
+      <div className="p-6">
+        <div
+          className="text-gray-800 prose max-w-none"
+          style={{
+            fontFamily:
+              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          }}
+        >
           {showFullContent ? (
             formattedContent
           ) : (
             <>
               {content.length > 200 ? (
                 <>
-                  {formattedContent.slice(0, 2)}{" "}
-                  <span className="text-pink-500">...</span>
+                  {formattedContent.slice(0, 2)}
+                  <p className="text-pink-500 mt-2">...</p>
                 </>
               ) : (
                 formattedContent
@@ -121,8 +196,8 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
 
       {/* Additional Images (Grid Display) */}
       {hasImages && images.length > 1 && (
-        <div className="p-4 pt-0">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">笔记图片</h4>
+        <div className="px-6 pb-6">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">笔记图片</h4>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
             {images.map((image, index) => (
               <div
