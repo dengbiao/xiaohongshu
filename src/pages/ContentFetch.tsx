@@ -109,39 +109,60 @@ const ContentFetch: React.FC = () => {
     try {
       let lastSuccessId: number | null = null;
 
-      // 遍历待处理的链接进行抓取
-      for (const item of pendingItems) {
-        try {
-          // 更新状态为抓取中
-          updateFetchedItem(item.id, { status: "fetching" });
+      // 创建一个Map来存储URL和对应的item信息
+      const urlToItemMap = new Map(
+        pendingItems.map((item) => [item.url, item])
+      );
 
-          // 调用 Coze API 抓取服务
-          const scrapedData = await redBookScraperService.scrapeNote(item.url);
+      // 使用 Promise.all 并发处理所有链接，但通过URL来关联请求和响应
+      const scrapePromises = Array.from(urlToItemMap.entries()).map(
+        async ([url, item]) => {
+          try {
+            // 更新状态为抓取中
+            updateFetchedItem(item.id, { status: "fetching" });
 
-          if (scrapedData) {
-            // 抓取成功，更新数据
-            updateFetchedItem(item.id, {
-              status: "success",
-              title: scrapedData.title,
-              content: scrapedData.content,
-              images: scrapedData.images,
-              video: scrapedData.video,
-              likes: scrapedData.likes,
-              comments: scrapedData.comments,
-              author: scrapedData.authorName,
-              publishTime: scrapedData.publishTime,
-              commentList: scrapedData.commentList,
-            });
-            lastSuccessId = item.id;
-          } else {
-            // 抓取失败
-            updateFetchedItem(item.id, { status: "error" });
+            // 调用 Coze API 抓取服务
+            const scrapedData = await redBookScraperService.scrapeNote(url);
+
+            // 再次从Map中获取item，确保使用正确的item信息
+            const currentItem = urlToItemMap.get(url);
+            if (!currentItem) {
+              console.error(`找不到URL对应的item: ${url}`);
+              return;
+            }
+
+            if (scrapedData) {
+              // 抓取成功，更新数据
+              updateFetchedItem(currentItem.id, {
+                status: "success",
+                title: scrapedData.title,
+                content: scrapedData.content,
+                images: scrapedData.images,
+                video: scrapedData.video,
+                likes: scrapedData.likes,
+                comments: scrapedData.comments,
+                author: scrapedData.authorName,
+                publishTime: scrapedData.publishTime,
+                commentList: scrapedData.commentList,
+              });
+              lastSuccessId = currentItem.id;
+            } else {
+              // 抓取失败
+              updateFetchedItem(currentItem.id, { status: "error" });
+            }
+          } catch (error) {
+            // 发生错误时，再次从Map中获取item确保更新正确的item状态
+            const currentItem = urlToItemMap.get(url);
+            if (currentItem) {
+              console.error(`抓取链接时出错: ${url}`, error);
+              updateFetchedItem(currentItem.id, { status: "error" });
+            }
           }
-        } catch (error) {
-          console.error(`抓取链接时出错: ${item.url}`, error);
-          updateFetchedItem(item.id, { status: "error" });
         }
-      }
+      );
+
+      // 等待所有抓取任务完成
+      await Promise.all(scrapePromises);
 
       // 如果没有选中任何项，且有成功抓取的结果，则选择最后一个成功的结果
       if (selectedItemId === null && lastSuccessId !== null) {

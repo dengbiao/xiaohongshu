@@ -39,7 +39,13 @@ export const useFetchStore = create<FetchStore>((set, get) => ({
   isFetching: false,
   
   addLink: (url) => {
-    const id = Date.now();
+    // 获取当前最大id
+    const currentMaxId = get().fetchedItems.reduce((max, item) => 
+      item.id > max ? item.id : max, 0
+    );
+    // 新id为最大id + 1
+    const id = currentMaxId + 1;
+    
     set((state) => ({
       fetchedItems: [...state.fetchedItems, { id, url, status: 'pending' }]
     }));
