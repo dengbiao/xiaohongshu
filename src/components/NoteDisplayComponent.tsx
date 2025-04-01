@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   FiUser,
   FiClock,
@@ -8,6 +8,8 @@ import {
   FiX,
   FiChevronLeft,
   FiChevronRight,
+  FiMaximize,
+  FiPlay,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrapedNote } from "../services/RedBookScraperService";
@@ -23,13 +25,16 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   showFullContent = false,
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
+  const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   // Check if the note is a ScrapedNote or FetchItem and normalize the data
   const images = "images" in note ? note.images : [];
   const coverImage =
     "coverImage" in note ? note.coverImage : note.images?.[0] || "";
   const video = "video" in note ? note.video : undefined;
-  const hasVideo = !!video;
+  const hasVideo = typeof video === "string" && video.length > 0;
   const hasImages = images && images.length > 0;
   const title = note.title || "";
   const content = note.content || "";
@@ -116,6 +121,21 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
     setActiveImageIndex(null);
   };
 
+  // Handle video controls
+  const toggleVideo = () => {
+    setIsVideoPlaying(!isVideoPlaying);
+  };
+
+  const openVideoFullscreen = () => {
+    setIsVideoFullscreen(true);
+    setIsVideoPlaying(true);
+  };
+
+  const closeVideoFullscreen = () => {
+    setIsVideoFullscreen(false);
+    setIsVideoPlaying(false);
+  };
+
   // 处理图片导航
   const navigateImage = useCallback(
     (direction: "prev" | "next") => {
@@ -159,6 +179,80 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeImageIndex, navigateImage, closeLightbox]);
 
+  // Add ESC key handler for video fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isVideoFullscreen && e.key === "Escape") {
+        e.preventDefault();
+        closeVideoFullscreen();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isVideoFullscreen]);
+
+  // 处理视频加载
+  const handleVideoLoad = useCallback((videoElement: HTMLVideoElement) => {
+    if (!videoElement) return;
+
+    // 设置视频请求头
+    const originalFetch = window.fetch;
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        typeof input === "string" &&
+        (input.includes("xhscdn.com") || input.includes("xiaohongshu.com"))
+      ) {
+        const headers = {
+          accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+          "cache-control": "max-age=0",
+          "if-modified-since": new Date().toUTCString(),
+          priority: "u=0, i",
+          "sec-ch-ua":
+            '"Chromium";v="134", "Not:A-Brand";v="24", "Google Chrome";v="134"',
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": '"macOS"',
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+        };
+
+        return originalFetch(input, {
+          ...init,
+          headers: {
+            ...headers,
+            ...(init?.headers || {}),
+          },
+          referrerPolicy: "no-referrer",
+          mode: "navigate",
+          credentials: "omit",
+        });
+      }
+      return originalFetch(input, init);
+    };
+
+    // 清理函数
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
+
+  // 在组件挂载时设置视频元素
+  useEffect(() => {
+    if (videoRef.current) {
+      const cleanup = handleVideoLoad(videoRef.current);
+      return () => {
+        cleanup?.();
+      };
+    }
+  }, [handleVideoLoad]);
+
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
       {/* Note Header */}
@@ -193,13 +287,52 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
 
       {/* Cover Image or Video */}
       {hasVideo ? (
-        <div className="relative w-full pt-[56.25%] bg-gray-100">
-          <video
-            className="absolute inset-0 w-full h-full object-contain"
-            src={video}
-            controls
-            poster={coverImage}
-          />
+        <div className="relative w-full pt-[56.25%] bg-gray-100 group">
+          {isVideoPlaying ? (
+            <video
+              ref={videoRef}
+              className="absolute inset-0 w-full h-full object-contain"
+              src={video}
+              controls
+              autoPlay
+              poster={coverImage}
+              onEnded={() => setIsVideoPlaying(false)}
+              onPause={() => setIsVideoPlaying(false)}
+              onPlay={() => setIsVideoPlaying(true)}
+              crossOrigin="anonymous"
+              preload="metadata"
+            />
+          ) : (
+            <>
+              <img
+                src={coverImage}
+                alt={title}
+                className="absolute inset-0 w-full h-full object-contain"
+              />
+              <div
+                className="absolute inset-0 flex items-center justify-center cursor-pointer group"
+                onClick={toggleVideo}
+              >
+                <div className="relative p-4">
+                  {/* 半透明黑色圆圈背景 */}
+                  <div className="absolute inset-0 bg-black/40 rounded-full backdrop-blur-[2px] transform transition-all duration-200 group-hover:bg-black/60" />
+                  {/* 播放图标 */}
+                  <FiPlay
+                    size={36}
+                    className="relative text-white transform transition-all duration-200 group-hover:scale-110"
+                    strokeWidth={2.5}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          <button
+            className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm opacity-0 group-hover:opacity-100"
+            onClick={openVideoFullscreen}
+          >
+            <FiMaximize size={20} />
+          </button>
         </div>
       ) : (
         hasImages && (
@@ -260,6 +393,52 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
           </div>
         </div>
       )}
+
+      {/* Video Fullscreen */}
+      <AnimatePresence>
+        {isVideoFullscreen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black flex items-center justify-center"
+          >
+            <button
+              className="absolute top-4 right-4 text-white p-2 hover:bg-gray-800 rounded-full z-50"
+              onClick={closeVideoFullscreen}
+            >
+              <FiX size={24} />
+            </button>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="w-full h-full flex items-center justify-center p-4"
+            >
+              <video
+                className="max-w-full max-h-full"
+                src={video}
+                controls
+                autoPlay
+                poster={coverImage}
+                onEnded={() => setIsVideoPlaying(false)}
+                onPause={() => setIsVideoPlaying(false)}
+                onPlay={() => setIsVideoPlaying(true)}
+              />
+            </motion.div>
+
+            {/* 键盘快捷键提示 */}
+            <div className="absolute bottom-4 right-4 text-white/70 text-sm">
+              <span className="flex items-center gap-1">
+                <kbd className="px-2 py-1 bg-white/10 rounded">Esc</kbd>
+                <span>关闭</span>
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Image Lightbox */}
       <AnimatePresence>

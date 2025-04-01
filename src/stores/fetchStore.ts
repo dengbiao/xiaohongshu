@@ -7,6 +7,7 @@ export type FetchItem = {
   title?: string;
   content?: string;
   images?: string[];
+  video?: string;
   likes?: number;
   comments?: number;
   author?: string;
