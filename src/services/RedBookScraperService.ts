@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { CozeAPI } from '@coze/api';
+
 
 // 定义抓取结果的接口
 export interface ScrapedNote {
@@ -63,8 +65,25 @@ class RedBookScraperService {
         throw new Error('无效的小红书链接');
       }
 
-      // 由于我们无法直接使用 Coze API，暂时使用模拟数据
-      // 在实际应用中，这里应替换为真实的 API 调用
+
+      const apiClient = new CozeAPI({
+        token: 'pat_UYwhd7p59aWQUJj76JQ3fv1KsylZ6QltwYI03RM77mU36zBEw4SAY0kkufKa2OL5',
+        baseURL: 'https://api.coze.cn',
+        allowPersonalAccessTokenInBrowser: true,
+      });
+      const res = await apiClient.workflows.runs.create({
+        workflow_id: '7488314439156187190',
+        app_id: '7488290964172341302',
+        is_async: false,
+        parameters: {
+          input_url: url,
+        },
+      })
+
+      return res;
+
+      // // 由于我们无法直接使用 Coze API，暂时使用模拟数据
+      // // 在实际应用中，这里应替换为真实的 API 调用
       // const response = await axios.post(this.apiEndpoint, {
       //   workflow_id: '7488314439156187190',
       //   parameters: {
@@ -76,6 +95,7 @@ class RedBookScraperService {
       //     'Content-Type': 'application/json'
       //   }
       // });
+      // return response.data;
       
       // 模拟抓取结果
       await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟网络延迟

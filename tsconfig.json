@@ -4,20 +4,16 @@
     "jsx": "preserve",
     "baseUrl": "./",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     },
     "strict": false,
-    "types": [
-      "react",
-      "react-dom"
-    ],
+    "types": ["react", "react-dom"],
     "target": "ES2017",
     "emitDecoratorMetadata": true,
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "moduleResolution": "node"
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }
