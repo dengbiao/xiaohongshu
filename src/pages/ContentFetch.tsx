@@ -107,6 +107,8 @@ const ContentFetch: React.FC = () => {
     toast.loading("正在抓取内容...", { id: "fetching" });
 
     try {
+      let lastSuccessId: number | null = null;
+
       // 遍历待处理的链接进行抓取
       for (const item of pendingItems) {
         try {
@@ -130,6 +132,7 @@ const ContentFetch: React.FC = () => {
               publishTime: scrapedData.publishTime,
               commentList: scrapedData.commentList,
             });
+            lastSuccessId = item.id;
           } else {
             // 抓取失败
             updateFetchedItem(item.id, { status: "error" });
@@ -138,6 +141,11 @@ const ContentFetch: React.FC = () => {
           console.error(`抓取链接时出错: ${item.url}`, error);
           updateFetchedItem(item.id, { status: "error" });
         }
+      }
+
+      // 如果没有选中任何项，且有成功抓取的结果，则选择最后一个成功的结果
+      if (selectedItemId === null && lastSuccessId !== null) {
+        setSelectedItemId(lastSuccessId);
       }
 
       toast.success("内容抓取完成", { id: "fetching" });
@@ -159,6 +167,9 @@ const ContentFetch: React.FC = () => {
   ).length;
   const fetchingCount = fetchedItems.filter(
     (item) => item.status === "fetching"
+  ).length;
+  const pendingCount = fetchedItems.filter(
+    (item) => item.status === "pending"
   ).length;
 
   const handleUploadClick = () => {
@@ -243,43 +254,44 @@ const ContentFetch: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left side - Link list */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-800">链接列表</h2>
-              <div className="text-gray-500 text-sm">
-                已添加{" "}
-                <span className="font-semibold text-pink-600">
-                  {fetchedItems.length}
-                </span>{" "}
-                个链接
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <div className="flex items-center text-sm text-gray-600">
-                  <span className="mr-3">
-                    <span className="font-medium text-green-600">
-                      {successCount}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold">链接列表</h2>
+                  <span className="text-sm text-gray-500">
+                    已添加{" "}
+                    <span className="font-medium text-pink-500">
+                      {fetchedItems.length}
                     </span>{" "}
-                    成功
+                    个链接
                   </span>
-                  <span className="mr-3">
-                    <span className="font-medium text-blue-600">
-                      {fetchingCount}
-                    </span>{" "}
-                    抓取中
+                </div>
+                <div className="flex items-center gap-4 text-sm border-l border-gray-200 pl-6">
+                  <span className="flex items-center gap-1.5 min-w-[80px]">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span className="text-green-500 font-medium">
+                      {successCount}
+                    </span>
+                    <span className="text-gray-600">成功</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 min-w-[80px]">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span className="text-blue-500 font-medium">
+                      {pendingCount}
+                    </span>
+                    <span className="text-gray-600">等待抓取</span>
                   </span>
                 </div>
               </div>
               <button
                 onClick={handleFetchContent}
-                disabled={
-                  isFetching ||
-                  fetchedItems.filter((i) => i.status === "pending").length ===
-                    0
-                }
-                className="px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-sm font-medium rounded-lg shadow hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isFetching || pendingCount === 0}
+                className={`px-6 py-2 rounded-full text-white font-medium transition-colors ${
+                  isFetching || pendingCount === 0
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-pink-500 hover:bg-pink-600"
+                }`}
               >
                 开始抓取
               </button>
