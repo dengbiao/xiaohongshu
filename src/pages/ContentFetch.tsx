@@ -256,41 +256,30 @@ const ContentFetch: React.FC = () => {
           {/* Left side - Link list */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center space-x-8">
+                <div className="flex items-center space-x-3">
                   <h2 className="text-xl font-semibold">链接列表</h2>
-                  <span className="text-sm text-gray-500">
-                    已添加{" "}
-                    <span className="font-medium text-pink-500">
-                      {fetchedItems.length}
-                    </span>{" "}
-                    个链接
-                  </span>
                 </div>
-                <div className="flex items-center gap-4 text-sm border-l border-gray-200 pl-6">
-                  <span className="flex items-center gap-1.5 min-w-[80px]">
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                <div className="flex items-center space-x-6">
+                  <div className="flex items-center space-x-2 px-3 py-1.5 bg-green-50 rounded-full">
+                    <span className="text-gray-600">完成：</span>
                     <span className="text-green-500 font-medium">
                       {successCount}
                     </span>
-                    <span className="text-gray-600">成功</span>
-                  </span>
-                  <span className="flex items-center gap-1.5 min-w-[80px]">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    <span className="text-blue-500 font-medium">
+                    <span className="text-gray-600">/</span>
+                    <span className="text-gray-500 font-medium">
                       {pendingCount}
                     </span>
-                    <span className="text-gray-600">等待抓取</span>
-                  </span>
+                  </div>
                 </div>
               </div>
               <button
                 onClick={handleFetchContent}
                 disabled={isFetching || pendingCount === 0}
-                className={`px-6 py-2 rounded-full text-white font-medium transition-colors ${
+                className={`px-6 py-2.5 rounded-full text-white font-medium transition-all duration-300 ${
                   isFetching || pendingCount === 0
                     ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-pink-500 hover:bg-pink-600"
+                    : "bg-gradient-to-r from-pink-500 to-purple-500 hover:shadow-md active:shadow-sm"
                 }`}
               >
                 开始抓取
