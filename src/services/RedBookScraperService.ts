@@ -25,6 +25,26 @@ export interface CommentItem {
   likes: number;
 }
 
+// 定义Coze API响应的接口
+interface CozeAPIResponse {
+  code: number;
+  cost: string;
+  data: string;
+  debug_url: string;
+  msg: string;
+  token: number;
+}
+
+interface CozeAPIOutputData {
+  output: {
+    banner: string;
+    bannerList: string[];
+    content: string;
+    title: string;
+    video: string | null;
+  }
+}
+
 class RedBookScraperService {
   private apiEndpoint: string;
   private token: string;
@@ -65,12 +85,12 @@ class RedBookScraperService {
         throw new Error('无效的小红书链接');
       }
 
-
       const apiClient = new CozeAPI({
         token: 'pat_UYwhd7p59aWQUJj76JQ3fv1KsylZ6QltwYI03RM77mU36zBEw4SAY0kkufKa2OL5',
         baseURL: 'https://api.coze.cn',
         allowPersonalAccessTokenInBrowser: true,
       });
+      
       const res = await apiClient.workflows.runs.create({
         workflow_id: '7488314439156187190',
         app_id: '7488290964172341302',
@@ -78,81 +98,31 @@ class RedBookScraperService {
         parameters: {
           input_url: url,
         },
-      })
+      }) as unknown as CozeAPIResponse;
 
-      return res;
-
-      // // 由于我们无法直接使用 Coze API，暂时使用模拟数据
-      // // 在实际应用中，这里应替换为真实的 API 调用
-      // const response = await axios.post(this.apiEndpoint, {
-      //   workflow_id: '7488314439156187190',
-      //   parameters: {
-      //     "input_url": url
-      //   }
-      // }, {
-      //   headers: {
-      //     'Authorization': `Bearer ${this.token}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // });
-      // return response.data;
-      
-      // 模拟抓取结果
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟网络延迟
-      
-      const mockImages = [
-        `https://picsum.photos/seed/${noteId}1/800/600`,
-        `https://picsum.photos/seed/${noteId}2/800/600`,
-        `https://picsum.photos/seed/${noteId}3/800/600`,
-      ];
-      
-      // 生成随机标题
-      const titles = [
-        '这款神仙水乳真的绝了！用了三天皮肤状态直接起飞',
-        '今日份穿搭分享|初春叠穿有点复杂但很值得',
-        '终于找到了平价替代!这家店的小众香水也太好闻了',
-        '上海探店|隐藏在街角的复古咖啡馆，氛围感拉满',
-        '三亚旅游攻略|本地人带你玩转亚龙湾，绝不踩雷'
-      ];
-      
-      // 生成随机内容片段
-      const contentParts = [
-        '最近入手了这款超级火爆的产品，真的是相见恨晚！',
-        '分享一下我的使用心得，希望对和我一样纠结的朋友有所帮助。',
-        '真的很推荐大家试试看，性价比超高而且效果立竿见影。',
-        '不得不说，这绝对是我今年买到的最满意的东西之一了！',
-        '本人已经回购三次了，家里常备，真的是用一次爱一次。'
-      ];
-      
-      // 随机选择标题和内容
-      const randomTitle = titles[Math.floor(Math.random() * titles.length)];
-      let randomContent = '';
-      for (let i = 0; i < 3; i++) {
-        randomContent += contentParts[Math.floor(Math.random() * contentParts.length)] + ' ';
+      if (res.code !== 0) {
+        throw new Error(`API调用失败: ${res.msg}`);
       }
+
+      // 解析JSON字符串数据
+      const parsedData = JSON.parse(res.data) as CozeAPIOutputData;
       
-      // 构建模拟的抓取结果
+      // 构建抓取结果
       const scrapedData: ScrapedNote = {
         id: noteId,
-        title: randomTitle,
-        content: randomContent,
-        images: mockImages,
-        likes: Math.floor(Math.random() * 10000),
-        comments: Math.floor(Math.random() * 500),
-        authorName: '小红书用户_' + Math.floor(Math.random() * 10000),
-        authorAvatar: `https://picsum.photos/seed/avatar${noteId}/200/200`,
-        publishTime: '2023-' + (Math.floor(Math.random() * 12) + 1) + '-' + (Math.floor(Math.random() * 28) + 1),
-        commentList: Array(Math.floor(Math.random() * 5) + 1).fill(null).map((_, i) => ({
-          id: `comment_${i}`,
-          content: '这个真的太好了！我也想试试看。',
-          authorName: '评论用户_' + Math.floor(Math.random() * 1000),
-          authorAvatar: `https://picsum.photos/seed/comment${i}${noteId}/200/200`,
-          time: '2023-' + (Math.floor(Math.random() * 12) + 1) + '-' + (Math.floor(Math.random() * 28) + 1),
-          likes: Math.floor(Math.random() * 100)
-        }))
+        title: parsedData.output.title,
+        content: parsedData.output.content,
+        images: parsedData.output.bannerList,
+        likes: 0, // API暂时没有提供这些数据
+        comments: 0,
+        authorName: '作者信息暂缺',
+        authorAvatar: '',
+        publishTime: new Date().toISOString().split('T')[0],
+        commentList: []
       };
-      
+
       return scrapedData;
+
     } catch (error) {
       console.error('抓取笔记时出错:', error);
       throw error;
