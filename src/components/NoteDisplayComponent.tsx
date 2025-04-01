@@ -26,7 +26,9 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
   const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoState, setVideoState] = useState<
+    "initial" | "playing" | "paused"
+  >("initial");
   const videoRef = useRef<HTMLVideoElement>(null);
 
   // Check if the note is a ScrapedNote or FetchItem and normalize the data
@@ -122,18 +124,70 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   };
 
   // Handle video controls
-  const toggleVideo = () => {
-    setIsVideoPlaying(!isVideoPlaying);
+  const handleVideoClick = () => {
+    if (!videoRef.current) return;
+
+    switch (videoState) {
+      case "initial":
+        // 从封面态开始播放
+        setVideoState("playing");
+        // 确保在状态更新后立即播放视频
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.play().catch((error) => {
+              console.error("Video playback failed:", error);
+              setVideoState("initial");
+            });
+          }
+        }, 0);
+        break;
+      case "playing":
+        // 播放时点击暂停
+        videoRef.current.pause();
+        setVideoState("paused");
+        break;
+      case "paused":
+        // 暂停时点击继续播放
+        videoRef.current.play().catch((error) => {
+          console.error("Video playback failed:", error);
+          setVideoState("paused");
+        });
+        setVideoState("playing");
+        break;
+    }
+  };
+
+  const handleVideoEnd = () => {
+    // 播放结束回到封面态
+    setVideoState("initial");
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+    }
+  };
+
+  const handleVideoPause = () => {
+    // 只有在非初始状态时才更新为暂停状态
+    if (videoState !== "initial") {
+      setVideoState("paused");
+    }
+  };
+
+  const handleVideoPlay = () => {
+    setVideoState("playing");
   };
 
   const openVideoFullscreen = () => {
     setIsVideoFullscreen(true);
-    setIsVideoPlaying(true);
+    setVideoState("playing");
   };
 
   const closeVideoFullscreen = () => {
     setIsVideoFullscreen(false);
-    setIsVideoPlaying(false);
+    setVideoState("initial");
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+    }
   };
 
   // 处理图片导航
@@ -288,45 +342,52 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
       {/* Cover Image or Video */}
       {hasVideo ? (
         <div className="relative w-full pt-[56.25%] bg-gray-100 group">
-          {isVideoPlaying ? (
+          <div className="absolute inset-0">
             <video
               ref={videoRef}
-              className="absolute inset-0 w-full h-full object-contain"
+              className="w-full h-full object-contain"
               src={video}
-              controls
-              autoPlay
+              controls={videoState !== "initial"}
               poster={coverImage}
-              onEnded={() => setIsVideoPlaying(false)}
-              onPause={() => setIsVideoPlaying(false)}
-              onPlay={() => setIsVideoPlaying(true)}
+              onEnded={handleVideoEnd}
+              onPause={handleVideoPause}
+              onPlay={handleVideoPlay}
               crossOrigin="anonymous"
               preload="metadata"
+              style={{ display: videoState === "initial" ? "none" : "block" }}
             />
-          ) : (
-            <>
-              <img
-                src={coverImage}
-                alt={title}
-                className="absolute inset-0 w-full h-full object-contain"
-              />
-              <div
-                className="absolute inset-0 flex items-center justify-center cursor-pointer group"
-                onClick={toggleVideo}
-              >
-                <div className="relative p-4">
-                  {/* 半透明黑色圆圈背景 */}
-                  <div className="absolute inset-0 bg-black/40 rounded-full backdrop-blur-[2px] transform transition-all duration-200 group-hover:bg-black/60" />
-                  {/* 播放图标 */}
-                  <FiPlay
-                    size={36}
-                    className="relative text-white transform transition-all duration-200 group-hover:scale-110"
-                    strokeWidth={2.5}
-                  />
+            {videoState === "initial" && (
+              <>
+                <img
+                  src={coverImage}
+                  alt={title}
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
+                <div
+                  className="absolute inset-0 flex items-center justify-center cursor-pointer group"
+                  onClick={handleVideoClick}
+                >
+                  <div className="relative p-4">
+                    <div className="absolute inset-0 bg-black/40 rounded-full backdrop-blur-[2px] transform transition-all duration-200 group-hover:bg-black/60" />
+                    <FiPlay
+                      size={36}
+                      className="relative text-white transform transition-all duration-200 group-hover:scale-110"
+                      strokeWidth={2.5}
+                    />
+                  </div>
                 </div>
-              </div>
-            </>
+              </>
+            )}
+          </div>
+
+          {videoState !== "initial" && (
+            <div
+              className="absolute inset-0 cursor-pointer"
+              onClick={handleVideoClick}
+            />
           )}
 
+          {/* 全屏按钮 */}
           <button
             className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm opacity-0 group-hover:opacity-100"
             onClick={openVideoFullscreen}
@@ -418,14 +479,17 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
               className="w-full h-full flex items-center justify-center p-4"
             >
               <video
+                ref={videoRef}
                 className="max-w-full max-h-full"
                 src={video}
                 controls
                 autoPlay
                 poster={coverImage}
-                onEnded={() => setIsVideoPlaying(false)}
-                onPause={() => setIsVideoPlaying(false)}
-                onPlay={() => setIsVideoPlaying(true)}
+                onEnded={handleVideoEnd}
+                onPause={handleVideoPause}
+                onPlay={handleVideoPlay}
+                crossOrigin="anonymous"
+                preload="metadata"
               />
             </motion.div>
 
