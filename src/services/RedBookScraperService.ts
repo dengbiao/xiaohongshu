@@ -7,7 +7,9 @@ export interface ScrapedNote {
   id: string;
   title: string;
   content: string;
+  coverImage: string;
   images: string[];
+  video?: string;
   likes: number;
   comments: number;
   authorName: string;
@@ -112,7 +114,9 @@ class RedBookScraperService {
         id: noteId,
         title: parsedData.output.title,
         content: parsedData.output.content,
+        coverImage: parsedData.output.banner,
         images: parsedData.output.bannerList,
+        ...(parsedData.output.video && { video: parsedData.output.video }),
         likes: 0, // API暂时没有提供这些数据
         comments: 0,
         authorName: '作者信息暂缺',
