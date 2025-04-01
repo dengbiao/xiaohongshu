@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   FiUser,
   FiClock,
@@ -6,6 +6,8 @@ import {
   FiMessageSquare,
   FiMaximize2,
   FiX,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrapedNote } from "../services/RedBookScraperService";
@@ -113,6 +115,49 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   const closeLightbox = () => {
     setActiveImageIndex(null);
   };
+
+  // 处理图片导航
+  const navigateImage = useCallback(
+    (direction: "prev" | "next") => {
+      if (activeImageIndex === null || !images.length) return;
+
+      let newIndex;
+      if (direction === "prev") {
+        newIndex =
+          activeImageIndex === 0 ? images.length - 1 : activeImageIndex - 1;
+      } else {
+        newIndex =
+          activeImageIndex === images.length - 1 ? 0 : activeImageIndex + 1;
+      }
+      setActiveImageIndex(newIndex);
+    },
+    [activeImageIndex, images.length]
+  );
+
+  // 键盘事件处理
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeImageIndex === null) return;
+
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          navigateImage("prev");
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          navigateImage("next");
+          break;
+        case "Escape":
+          e.preventDefault();
+          closeLightbox();
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeImageIndex, navigateImage, closeLightbox]);
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -224,23 +269,79 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4"
-            onClick={closeLightbox}
+            onClick={(e) => {
+              // 只有点击背景时才关闭
+              if (e.target === e.currentTarget) {
+                closeLightbox();
+              }
+            }}
           >
+            {/* 关闭按钮 */}
             <button
-              className="absolute top-4 right-4 text-white p-2 hover:bg-gray-800 rounded-full"
+              className="absolute top-4 right-4 text-white p-2 hover:bg-gray-800 rounded-full z-50"
               onClick={closeLightbox}
             >
               <FiX size={24} />
             </button>
 
-            <img
-              src={images[activeImageIndex]}
-              alt={`全屏图片 ${activeImageIndex + 1}`}
-              className="max-w-full max-h-[90vh] object-contain"
-            />
+            {/* 左箭头 */}
+            <button
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-white p-3 hover:bg-gray-800/50 rounded-full z-50 transition-all duration-200 backdrop-blur-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigateImage("prev");
+              }}
+            >
+              <FiChevronLeft size={32} />
+            </button>
 
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm">
+            {/* 右箭头 */}
+            <button
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white p-3 hover:bg-gray-800/50 rounded-full z-50 transition-all duration-200 backdrop-blur-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigateImage("next");
+              }}
+            >
+              <FiChevronRight size={32} />
+            </button>
+
+            {/* 图片 */}
+            <motion.div
+              key={activeImageIndex}
+              className="relative flex items-center justify-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              <img
+                src={images[activeImageIndex]}
+                alt={`全屏图片 ${activeImageIndex + 1}`}
+                className="max-w-full max-h-[90vh] object-contain select-none"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </motion.div>
+
+            {/* 图片计数器 */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
               {activeImageIndex + 1} / {images.length}
+            </div>
+
+            {/* 键盘快捷键提示 */}
+            <div className="absolute bottom-4 right-4 text-white/70 text-sm flex gap-4">
+              <span className="flex items-center gap-1">
+                <kbd className="px-2 py-1 bg-white/10 rounded">←</kbd>
+                <span>上一张</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <kbd className="px-2 py-1 bg-white/10 rounded">→</kbd>
+                <span>下一张</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <kbd className="px-2 py-1 bg-white/10 rounded">Esc</kbd>
+                <span>关闭</span>
+              </span>
             </div>
           </motion.div>
         )}
