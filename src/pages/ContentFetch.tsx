@@ -376,13 +376,19 @@ const ContentFetch: React.FC = () => {
                           </button>
                         )}
                         {item.status === "error" && (
-                          <span className="text-red-500">抓取失败</span>
+                          <span className="text-red-500 min-w-[5.5rem] inline-block text-center px-3 bg-red-50 rounded-md">
+                            抓取失败
+                          </span>
                         )}
                         {item.status === "fetching" && (
-                          <span className="text-blue-500">抓取中...</span>
+                          <span className="text-blue-500 min-w-[5.5rem] inline-block text-center px-3 bg-red-50 rounded-md">
+                            抓取中...
+                          </span>
                         )}
                         {item.status === "pending" && (
-                          <span className="text-gray-400">等待抓取</span>
+                          <span className="text-gray-400 min-w-[5.5rem] inline-block text-center px-3 bg-red-50 rounded-md">
+                            等待抓取
+                          </span>
                         )}
                       </div>
                     </li>
