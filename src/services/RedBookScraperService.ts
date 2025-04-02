@@ -9,6 +9,7 @@ export interface ScrapedNote {
   content: string;
   coverImage: string;
   images: string[];
+  imagesText?: Array<{code: number, text: string}>;
   video?: string;
   likes: number;
   comments: number;
@@ -41,6 +42,7 @@ interface CozeAPIOutputData {
   output: {
     banner: string;
     bannerList: string[];
+    bannerListText: Array<{code: number, text: string}>;
     content: string;
     title: string;
     video: string | null;
@@ -117,6 +119,7 @@ class RedBookScraperService {
         content: output.content,
         coverImage: output.banner,
         images: output.bannerList || [],
+        imagesText: output.bannerListText || [],
         ...(output.video && { video: output.video }),
         likes: 0,
         comments: 0,

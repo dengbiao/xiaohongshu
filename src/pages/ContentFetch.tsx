@@ -138,6 +138,7 @@ const ContentFetch: React.FC = () => {
                 title: scrapedData.title,
                 content: scrapedData.content,
                 images: scrapedData.images,
+                imagesText: scrapedData.imagesText,
                 video: scrapedData.video,
                 likes: scrapedData.likes,
                 comments: scrapedData.comments,

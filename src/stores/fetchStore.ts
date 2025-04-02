@@ -7,6 +7,7 @@ export type FetchItem = {
   title?: string;
   content?: string;
   images?: string[];
+  imagesText?: Array<{code: number, text: string}>;
   video?: string;
   likes?: number;
   comments?: number;
