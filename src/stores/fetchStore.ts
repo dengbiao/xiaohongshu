@@ -6,6 +6,7 @@ export type FetchItem = {
   status: 'pending' | 'fetching' | 'success' | 'error';
   title?: string;
   content?: string;
+  abstract?: string;
   images?: string[];
   imagesText?: Array<{code: number, text: string}>;
   video?: string;

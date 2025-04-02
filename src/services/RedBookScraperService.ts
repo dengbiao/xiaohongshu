@@ -7,6 +7,7 @@ export interface ScrapedNote {
   id: string;
   title: string;
   content: string;
+  abstract?: string;
   coverImage: string;
   images: string[];
   imagesText?: Array<{code: number, text: string}>;

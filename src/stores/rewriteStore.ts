@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { FetchItem } from './fetchStore';
+import { redBookRewriteService, RewrittenNote } from '../services/RedBookRewriteService';
+import { ScrapedNote } from '../services/RedBookScraperService';
 
 export type RewriteSettings = {
   style: string;
@@ -13,6 +15,7 @@ export type RewrittenItem = {
   id: number;
   title: string;
   content: string;
+  abstract?: string; 
   imageCount?: number;
 };
 
@@ -47,58 +50,58 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
     
     set({ isRewriting: true });
     
-    // 模拟改写过程
-    // 这里只是简单示例，实际应用中应该基于设置进行更复杂的处理
-    const { style, differenceRate, lengthAdjustment, batchCount } = get().rewriteSettings;
-    const newItems = [];
-    
-    for (let i = 0; i < batchCount; i++) {
-      // 根据风格调整内容
-      let rewrittenContent = item.content;
-      let rewrittenTitle = item.title || '';
+    try {
+      const { batchCount } = get().rewriteSettings;
+      const newItems = [];
       
-      // 延迟模拟处理时间
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // 构建用于改写的笔记对象
+      const note: ScrapedNote = {
+        id: String(item.id), // 转换为字符串类型
+        title: item.title || '',
+        content: item.content,
+        coverImage: item.images?.[0] || '', // 使用第一张图片作为封面
+        images: item.images || [],
+        imagesText: item.imagesText || [],
+        likes: item.likes || 0,
+        comments: item.comments || 0,
+        authorName: item.author || '',
+        authorAvatar: '',
+        publishTime: item.publishTime || new Date().toISOString().split('T')[0]
+      };
       
-      // 模拟不同风格的改写
-      if (style === 'casual') {
-        rewrittenContent = `嘿，朋友们！${rewrittenContent.replace('分享', '告诉大家').replace('技巧', '小窍门')}`;
-        rewrittenTitle = rewrittenTitle.replace('分享', '告诉你').replace('技巧', '小窍门');
-      } else if (style === 'professional') {
-        rewrittenContent = `研究表明，${rewrittenContent.replace('分享', '提供').replace('小技巧', '专业方法')}`;
-        rewrittenTitle = rewrittenTitle.replace('分享', '解析').replace('技巧', '方法论');
-      } else if (style === 'creative') {
-        rewrittenContent = `✨灵感来袭✨ ${rewrittenContent.replace('分享', '创意呈现').replace('技巧', '妙招')}`;
-        rewrittenTitle = `✨创意 | ${rewrittenTitle.replace('分享', '创意展示').replace('技巧', '妙招')}`;
-      } else if (style === 'humorous') {
-        rewrittenContent = `笑话来了！${rewrittenContent.replace('分享', '逗你一乐').replace('技巧', '搞笑绝招')}`;
-        rewrittenTitle = `哈哈哈 | ${rewrittenTitle.replace('分享', '笑谈').replace('技巧', '绝招')}`;
+      // 使用改写服务进行内容改写
+      for (let i = 0; i < batchCount; i++) {
+        try {
+          // 调用改写服务
+          const rewrittenNote = await redBookRewriteService.rewriteNote(note);
+          
+          if (rewrittenNote) {
+            newItems.push({
+              id: Date.now() + i,
+              title: rewrittenNote.title,
+              content: rewrittenNote.content,
+              abstract: rewrittenNote.abstract,
+              imageCount: note.images.length
+            });
+          }
+        } catch (error) {
+          console.error('改写内容时出错:', error);
+        }
+        
+        // 在多个版本之间添加小延迟
+        if (i < batchCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
       
-      // 根据长度调整
-      if (lengthAdjustment > 0) {
-        // 增加内容长度
-        rewrittenContent += `\n\n更多${rewrittenTitle}相关的内容，欢迎关注我，下期将会带来更多精彩内容！`;
-      } else if (lengthAdjustment < 0) {
-        // 减少内容长度
-        rewrittenContent = rewrittenContent.split(' ').slice(0, Math.max(3, Math.floor(rewrittenContent.split(' ').length * 0.7))).join(' ') + '...';
-      }
-      
-      // 模拟图片数量
-      const imageCount = Math.floor(Math.random() * 5) + 1;
-      
-      newItems.push({
-        id: Date.now() + i,
-        title: `${rewrittenTitle} (改写版本 ${i + 1})`,
-        content: rewrittenContent,
-        imageCount
-      });
+      set((state) => ({
+        rewrittenItems: [...newItems, ...state.rewrittenItems],
+        isRewriting: false
+      }));
+    } catch (error) {
+      console.error('改写内容时出错:', error);
+      set({ isRewriting: false });
     }
-    
-    set((state) => ({
-      rewrittenItems: [...newItems, ...state.rewrittenItems],
-      isRewriting: false
-    }));
   },
   
   clearRewrittenItems: () => {

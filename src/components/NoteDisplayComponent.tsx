@@ -40,6 +40,7 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   const hasImages = images && images.length > 0;
   const title = note.title || "";
   const content = note.content || "";
+  const abstract = ("abstract" in note && note.abstract) || "";
   const author =
     "authorName" in note ? note.authorName : note.author || "未知作者";
   const publishTime =
@@ -321,6 +322,9 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
         >
           {title}
         </h3>
+        {abstract && (
+          <p className="text-gray-500 mt-2 mb-2 text-base italic">{abstract}</p>
+        )}
         <div className="flex items-center text-sm text-gray-500 mt-2 space-x-4">
           <span className="flex items-center">
             <FiUser className="mr-1" /> {author}

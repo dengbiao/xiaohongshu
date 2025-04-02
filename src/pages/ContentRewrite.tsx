@@ -96,6 +96,7 @@ const ContentRewrite: React.FC = () => {
           images: selectedItem.images || [],
           author: selectedItem.author || "",
           publishTime: selectedItem.publishTime || "",
+          abstract: rewrittenItems[0].abstract || "",
         } as FetchItem)
       : null;
 
