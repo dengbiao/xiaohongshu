@@ -1,5 +1,6 @@
 import { CozeAPI } from '@coze/api';
 import { ScrapedNote } from './RedBookScraperService';
+import * as htmlToImage from 'html-to-image';
 
 // 定义改写后的笔记接口
 export interface RewrittenNote {
@@ -7,6 +8,8 @@ export interface RewrittenNote {
   abstract: string;
   content: string;
   code: number;
+  contentPages?: string[];  // 分页内容数组
+  generatedImages?: string[]; // 从内容生成的图片URLs
 }
 
 // 定义Coze API响应的接口
@@ -41,6 +44,261 @@ class RedBookRewriteService {
     this.token = 'pat_UYwhd7p59aWQUJj76JQ3fv1KsylZ6QltwYI03RM77mU36zBEw4SAY0kkufKa2OL5';
     this.workflowId = '7488562216497692687'; // 改写服务的workflow_id
     this.appId = '7488290964172341302';
+  }
+
+  /**
+   * 将文本内容分割成多个页面
+   * 尝试按段落分割，确保每页内容不会过长
+   * @param content 要分割的文本
+   * @param charsPerPage 每页字符上限（默认800）
+   * @returns 分页后的内容数组
+   */
+  private splitContentIntoPages(content: string, charsPerPage: number = 800): string[] {
+    // 按换行符分割获取段落
+    const paragraphs = content.split(/\n+/);
+    const pages: string[] = [];
+    let currentPage = '';
+
+    for (const paragraph of paragraphs) {
+      // 如果当前段落很长，需要进一步拆分
+      if (paragraph.length > charsPerPage) {
+        // 如果当前页已有内容，先保存
+        if (currentPage.length > 0) {
+          pages.push(currentPage);
+          currentPage = '';
+        }
+
+        // 拆分长段落
+        let remainingText = paragraph;
+        while (remainingText.length > 0) {
+          // 尝试在合适的位置断句（标点符号后）
+          let cutPoint = charsPerPage;
+          if (remainingText.length > charsPerPage) {
+            // 查找合适的断句点（句号、问号、感叹号等）
+            for (let i = cutPoint - 1; i >= cutPoint - 200 && i >= 0; i--) {
+              const char = remainingText[i];
+              if (['。', '！', '？', '.', '!', '?'].includes(char)) {
+                cutPoint = i + 1;
+                break;
+              }
+            }
+          } else {
+            cutPoint = remainingText.length;
+          }
+
+          pages.push(remainingText.slice(0, cutPoint));
+          remainingText = remainingText.slice(cutPoint);
+        }
+      } else if (currentPage.length + paragraph.length + 1 > charsPerPage) {
+        // 如果添加这一段后会超过页面上限，保存当前页并开始新页面
+        pages.push(currentPage);
+        currentPage = paragraph;
+      } else {
+        // 将段落添加到当前页
+        if (currentPage.length > 0) {
+          currentPage += '\n\n';
+        }
+        currentPage += paragraph;
+      }
+    }
+
+    // 添加最后一页
+    if (currentPage.length > 0) {
+      pages.push(currentPage);
+    }
+
+    return pages;
+  }
+
+  /**
+   * 根据文本内容生成图片
+   * 每页文本内容生成一张图片
+   * @param contentPages 分页的文本内容
+   * @returns 生成的图片URLs数组
+   */
+  private async generateImagesFromText(contentPages: string[]): Promise<string[]> {
+    if (!contentPages || contentPages.length === 0) {
+      return [];
+    }
+
+    try {
+      // 创建一个画布元素，用于生成图片
+      const createTextImage = async (text: string, index: number): Promise<string> => {
+        return new Promise((resolve, reject) => {
+          try {
+            // 创建一个临时的div元素作为绘制内容的容器
+            const tempElement = document.createElement('div');
+            // 设置样式确保可见并正确渲染
+            tempElement.style.width = '390px';
+            tempElement.style.height = '520px';
+            tempElement.style.position = 'absolute';
+            tempElement.style.left = '0'; // Changed from -9999px to make visible during rendering
+            tempElement.style.top = '0';
+            tempElement.style.backgroundColor = '#ffffff';
+            tempElement.style.border = '1px solid #ddd';
+            tempElement.style.borderRadius = '8px';
+            tempElement.style.overflow = 'hidden';
+            tempElement.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+            tempElement.style.zIndex = '-1'; // Put behind other elements but still renderable
+            
+            // 处理文本，确保字符串转义问题
+            let formattedText = text;
+            try {
+              // 修复转义字符问题
+              formattedText = text
+                .replace(/\\n/g, '<br/>') // 正确处理换行符
+                .replace(/#([^#\s]+)/g, '<span style="color:#FF2442; font-weight:bold;">#$1</span>')
+                .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+            } catch (error) {
+              console.warn('文本格式化失败，使用原始文本:', error);
+            }
+            
+            // 使用简化的HTML结构
+            tempElement.innerHTML = `
+              <div style="display:flex; flex-direction:column; height:100%; width:100%; font-family:system-ui, -apple-system, sans-serif;">
+                <div style="background: linear-gradient(135deg, #FF2442, #FF8A8A); padding: 12px; color: white; text-align: center;">
+                  <div style="font-size: 16px; font-weight: bold;">小红书内容 - 第 ${index + 1} 页</div>
+                </div>
+                <div style="flex: 1; padding: 16px; overflow-y: auto; color: black; font-size: 14px; line-height: 1.5; white-space: pre-wrap;">
+                  ${formattedText}
+                </div>
+                <div style="background-color: #f7f7f7; padding: 8px; text-align: center; font-size: 12px; color: #666;">
+                  总 ${contentPages.length} 页
+                </div>
+              </div>
+            `;
+            
+            document.body.appendChild(tempElement);
+            
+            // 确保DOM已经完全渲染
+            setTimeout(() => {
+              console.log(`正在生成第${index + 1}页图片，内容长度: ${text.length}字符`);
+              
+              // 使用更稳定的方法捕获可能的错误
+              htmlToImage.toPng(tempElement, {
+                quality: 0.9,
+                pixelRatio: 1.5,
+                backgroundColor: '#ffffff',
+                skipAutoScale: false, // 允许自动缩放
+                cacheBust: true,
+                canvasWidth: 390,
+                canvasHeight: 520,
+              })
+              .then((dataUrl) => {
+                // 清理临时元素
+                if (document.body.contains(tempElement)) {
+                  document.body.removeChild(tempElement);
+                }
+                console.log(`第${index + 1}页图片生成成功`);
+                resolve(dataUrl);
+              })
+              .catch((error) => {
+                console.error('生成图片失败:', error);
+                // 生成失败时，创建一个简单的备用图片
+                const canvas = document.createElement('canvas');
+                canvas.width = 390;
+                canvas.height = 520;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  // 绘制简单背景
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(0, 0, canvas.width, canvas.height);
+                  
+                  // 绘制标题栏
+                  ctx.fillStyle = '#FF2442';
+                  ctx.fillRect(0, 0, canvas.width, 50);
+                  
+                  // 绘制文字
+                  ctx.fillStyle = '#ffffff';
+                  ctx.font = 'bold 16px sans-serif';
+                  ctx.fillText(`第 ${index + 1} 页 / 共 ${contentPages.length} 页`, 20, 30);
+                  
+                  // 绘制内容预览
+                  ctx.fillStyle = '#333333';
+                  ctx.font = '14px sans-serif';
+                  
+                  // 分割预览文本到多行并绘制
+                  const previewText = text.substring(0, 200) + '...';
+                  const words = previewText.split(' ');
+                  let line = '';
+                  let y = 80;
+                  
+                  for (const word of words) {
+                    const testLine = line + word + ' ';
+                    const metrics = ctx.measureText(testLine);
+                    const testWidth = metrics.width;
+                    
+                    if (testWidth > canvas.width - 40 && line !== '') {
+                      ctx.fillText(line, 20, y);
+                      line = word + ' ';
+                      y += 20;
+                      
+                      // 最多显示5行
+                      if (y > 180) break;
+                    } else {
+                      line = testLine;
+                    }
+                  }
+                  
+                  // 绘制最后一行
+                  if (line !== '') {
+                    ctx.fillText(line, 20, y);
+                  }
+                }
+                
+                // 返回备用图片
+                if (document.body.contains(tempElement)) {
+                  document.body.removeChild(tempElement);
+                }
+                
+                resolve(canvas.toDataURL('image/png'));
+              });
+            }, 500); // 增加延迟，确保DOM完全渲染
+          } catch (error) {
+            console.error('创建图片元素时出错:', error);
+            reject(error);
+          }
+        });
+      };
+
+      // 为每页内容生成图片
+      console.log(`开始为${contentPages.length}页内容生成图片...`);
+      const result: string[] = [];
+      
+      // 串行处理图片生成以提高稳定性
+      for (let i = 0; i < contentPages.length; i++) {
+        try {
+          const image = await createTextImage(contentPages[i], i);
+          result.push(image);
+          console.log(`成功生成第${i+1}/${contentPages.length}页图片`);
+        } catch (e) {
+          console.error(`生成第${i+1}页图片失败:`, e);
+          // 创建一个简单的失败标记图片
+          const canvas = document.createElement('canvas');
+          canvas.width = 390;
+          canvas.height = 520;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#FF2442';
+            ctx.fillRect(0, 0, canvas.width, 50);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.fillText(`第 ${i + 1} 页 / 共 ${contentPages.length} 页`, 20, 30);
+            ctx.fillStyle = '#333333';
+            ctx.font = '14px sans-serif';
+            ctx.fillText('图片生成失败', 20, 80);
+          }
+          result.push(canvas.toDataURL('image/png'));
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      console.error('文本转图片过程出错:', error);
+      return [];
+    }
   }
 
   /**
@@ -90,6 +348,21 @@ class RedBookRewriteService {
         throw new Error(`改写处理失败: code=${parsedData.code}`);
       }
       
+      // 分页处理：将内容分割成多个页面
+      const contentPages = this.splitContentIntoPages(parsedData.content);
+      parsedData.contentPages = contentPages;
+      
+      try {
+        // 生成图片
+        console.log(`开始为${contentPages.length}页内容生成图片...`);
+        const generatedImages = await this.generateImagesFromText(contentPages);
+        parsedData.generatedImages = generatedImages;
+        console.log(`成功生成${generatedImages.length}张图片`);
+      } catch (error) {
+        console.error('生成图片时出错:', error);
+        // 出错时不影响整体流程，继续返回已有内容
+      }
+      
       return parsedData;
     } catch (error) {
       console.error('改写笔记时出错:', error);
@@ -104,8 +377,21 @@ class RedBookRewriteService {
   async rewriteMultipleNotes(notes: ScrapedNote[]): Promise<(RewrittenNote | null)[]> {
     try {
       // 同时发起多个请求，提高效率
-      const promises = notes.map(note => this.rewriteNote(note).catch(() => null));
-      return await Promise.all(promises);
+      // 由于图片生成可能比较消耗资源，这里改为串行处理，避免浏览器崩溃
+      const results: (RewrittenNote | null)[] = [];
+      
+      for (const note of notes) {
+        try {
+          console.log(`正在处理笔记: ${note.title}`);
+          const rewritten = await this.rewriteNote(note);
+          results.push(rewritten);
+        } catch (error) {
+          console.error(`处理笔记失败: ${note.title}`, error);
+          results.push(null);
+        }
+      }
+      
+      return results;
     } catch (error) {
       console.error('批量改写笔记时出错:', error);
       throw error;

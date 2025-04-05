@@ -14,9 +14,10 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { ScrapedNote } from "../services/RedBookScraperService";
 import { FetchItem } from "../stores/fetchStore";
+import { RewrittenNote } from "../services/RedBookRewriteService";
 
 interface NoteDisplayProps {
-  note: ScrapedNote | FetchItem;
+  note: ScrapedNote | FetchItem | RewrittenNote;
   showFullContent?: boolean;
 }
 
@@ -31,22 +32,37 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   >("initial");
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Check if the note is a ScrapedNote or FetchItem and normalize the data
+  // State to track which type of images we're viewing in lightbox
+  const [currentImageType, setCurrentImageType] = useState<
+    "regular" | "generated"
+  >("regular");
+
+  // Check if the note is a ScrapedNote, FetchItem, or RewrittenNote and normalize the data
   const images = "images" in note ? note.images : [];
+  const generatedImages =
+    "generatedImages" in note ? note.generatedImages || [] : [];
   const coverImage =
-    "coverImage" in note ? note.coverImage : note.images?.[0] || "";
+    "coverImage" in note
+      ? note.coverImage
+      : "images" in note && note.images?.length > 0
+      ? note.images[0]
+      : "";
   const video = "video" in note ? note.video : undefined;
   const hasVideo = typeof video === "string" && video.length > 0;
-  const hasImages = images && images.length > 0;
+  const hasImages = "images" in note && note.images && note.images.length > 0;
+  const hasGeneratedImages = generatedImages && generatedImages.length > 0;
   const title = note.title || "";
   const content = note.content || "";
   const abstract = ("abstract" in note && note.abstract) || "";
   const author =
-    "authorName" in note ? note.authorName : note.author || "未知作者";
-  const publishTime =
-    "publishTime" in note ? note.publishTime : note.publishTime || "";
-  const likes = "likes" in note ? note.likes : note.likes || 0;
-  const comments = "comments" in note ? note.comments : note.comments || 0;
+    "authorName" in note
+      ? note.authorName
+      : "author" in note
+      ? note.author
+      : "未知作者";
+  const publishTime = "publishTime" in note ? note.publishTime : "";
+  const likes = "likes" in note ? note.likes : 0;
+  const comments = "comments" in note ? note.comments : 0;
 
   // Format content with enhanced text processing
   const formatContent = (text: string) => {
@@ -116,7 +132,12 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   const formattedContent = formatContent(content);
 
   // Handle lightbox open and close
-  const openLightbox = (index: number) => {
+  const openLightbox = (
+    index: number,
+    imageType: "regular" | "generated" = "regular"
+  ) => {
+    // Store the current image type
+    setCurrentImageType(imageType);
     setActiveImageIndex(index);
   };
 
@@ -194,19 +215,24 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
   // 处理图片导航
   const navigateImage = useCallback(
     (direction: "prev" | "next") => {
-      if (activeImageIndex === null || !images.length) return;
+      if (activeImageIndex === null) return;
+
+      // Determine which image array to use
+      const imageArray =
+        currentImageType === "generated" ? generatedImages : images;
+      if (!imageArray.length) return;
 
       let newIndex;
       if (direction === "prev") {
-        newIndex =
-          activeImageIndex === 0 ? images.length - 1 : activeImageIndex - 1;
+        newIndex = activeImageIndex - 1;
+        if (newIndex < 0) newIndex = imageArray.length - 1;
       } else {
-        newIndex =
-          activeImageIndex === images.length - 1 ? 0 : activeImageIndex + 1;
+        newIndex = activeImageIndex + 1;
+        if (newIndex >= imageArray.length) newIndex = 0;
       }
       setActiveImageIndex(newIndex);
     },
-    [activeImageIndex, images.length]
+    [activeImageIndex, images, generatedImages, currentImageType]
   );
 
   // 键盘事件处理
@@ -459,6 +485,36 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
         </div>
       )}
 
+      {/* Generated Images from Content */}
+      {hasGeneratedImages && (
+        <div className="px-6 pb-6">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">内容图片</h4>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {generatedImages.map((image, index) => (
+              <div
+                key={`gen-${index}`}
+                className="relative bg-gray-100 rounded-lg overflow-hidden cursor-pointer hover:opacity-95 transition-opacity duration-200 shadow-md"
+                onClick={() => {
+                  // For generated images, use the 'generated' type
+                  openLightbox(index, "generated");
+                }}
+              >
+                <div className="aspect-[3/4]">
+                  <img
+                    src={image}
+                    alt={`内容图片 ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm">
+                  第 {index + 1} 页
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Video Fullscreen */}
       <AnimatePresence>
         {isVideoFullscreen && (
@@ -563,7 +619,11 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
               transition={{ duration: 0.15 }}
             >
               <img
-                src={images[activeImageIndex]}
+                src={
+                  currentImageType === "generated"
+                    ? generatedImages[activeImageIndex]
+                    : images[activeImageIndex]
+                }
                 alt={`全屏图片 ${activeImageIndex + 1}`}
                 className="max-w-full max-h-[90vh] object-contain select-none"
                 onClick={(e) => e.stopPropagation()}
@@ -572,7 +632,10 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
 
             {/* 图片计数器 */}
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
-              {activeImageIndex + 1} / {images.length}
+              {activeImageIndex + 1} /{" "}
+              {currentImageType === "generated"
+                ? generatedImages.length
+                : images.length}
             </div>
 
             {/* 键盘快捷键提示 */}

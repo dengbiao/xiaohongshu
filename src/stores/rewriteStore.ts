@@ -17,6 +17,8 @@ export type RewrittenItem = {
   content: string;
   abstract?: string; 
   imageCount?: number;
+  generatedImages?: string[]; // 从内容生成的图片
+  contentPages?: string[]; // 分页内容
 };
 
 type RewriteStore = {
@@ -81,7 +83,9 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
               title: rewrittenNote.title,
               content: rewrittenNote.content,
               abstract: rewrittenNote.abstract,
-              imageCount: note.images.length
+              imageCount: note.images.length,
+              generatedImages: rewrittenNote.generatedImages,
+              contentPages: rewrittenNote.contentPages
             });
           }
         } catch (error) {
