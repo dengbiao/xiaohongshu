@@ -58,85 +58,101 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
     setCurrentImages(images);
   }, [content, images]);
 
+  // 渲染分页符组件
+  const renderPageBreak = (key: string | number) => {
+    return (
+      <div key={`pagebreak-${key}`} className="w-full my-6 relative">
+        <div className="relative flex items-center">
+          <div className="flex-grow h-0 border-t border-dashed border-gray-300"></div>
+          <div className="mx-2 px-2 bg-white text-xs text-pink-400 flex items-center">
+            <FiScissors className="mr-1" size={12} />
+            <span className="text-gray-500">分页符</span>
+          </div>
+          <div className="flex-grow h-0 border-t border-dashed border-gray-300"></div>
+        </div>
+      </div>
+    );
+  };
+
   // 格式化内容 - 用于非Markdown内容（兼容旧格式）
   const formatContent = (text: string) => {
     // 将制表符转换为换行符，然后按单个换行符分割
     const processedText = text.replace(/\t/g, "\n");
-    // 使用单个换行符分割，这样可以保留所有空行
-    const paragraphs = processedText.split("\n");
 
-    return paragraphs.map((paragraph, index) => {
-      // 检查是否为分页符
-      if (paragraph.trim() === DocumentPaginationService.PAGE_BREAK_MARKER) {
-        return (
-          <div key={`pagebreak-${index}`} className="w-full my-8 py-1 relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="border-t border-gray-300 flex-grow"></div>
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-white px-4 text-sm text-gray-500 flex items-center">
-                <FiScissors className="mr-2" size={14} /> 分页符
-              </span>
-            </div>
-          </div>
-        );
+    // 使用更可靠的方式分割文本和分页符
+    const result = [];
+    const parts = processedText.split(
+      DocumentPaginationService.PAGE_BREAK_MARKER
+    );
+
+    // 对每个部分单独处理，并在每个部分之间添加分页符
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) {
+        // 添加分页符
+        result.push(renderPageBreak(`text-${i}`));
       }
 
-      // 处理链接
-      const processLinks = (text: string) => {
-        return text.replace(
-          /(https?:\/\/[^\s]+)/g,
-          '<a href="$1" class="text-pink-500 hover:text-pink-600 underline" target="_blank" rel="noopener noreferrer">$1</a>'
+      // 处理文本部分
+      const paragraphs = parts[i].split("\n");
+      for (const [pIndex, paragraph] of paragraphs.entries()) {
+        // 处理链接
+        const processLinks = (text: string) => {
+          return text.replace(
+            /(https?:\/\/[^\s]+)/g,
+            '<a href="$1" class="text-pink-500 hover:text-pink-600 underline" target="_blank" rel="noopener noreferrer">$1</a>'
+          );
+        };
+
+        // 处理标签
+        const processTags = (text: string) => {
+          return text.replace(
+            /#([^#\s]+)/g,
+            '<span class="text-pink-500">#$1</span>'
+          );
+        };
+
+        // 处理@提及
+        const processMentions = (text: string) => {
+          return text.replace(
+            /@([^\s]+)/g,
+            '<span class="text-blue-500">@$1</span>'
+          );
+        };
+
+        // 处理表情符号 - 增加适当的间距
+        const processEmoji = (text: string) => {
+          return text.replace(
+            /([\u{1F300}-\u{1F9FF}])/gu,
+            '<span class="inline-block mx-0.5">$1</span>'
+          );
+        };
+
+        // 应用所有格式化
+        let formattedText = paragraph;
+        formattedText = processLinks(formattedText);
+        formattedText = processTags(formattedText);
+        formattedText = processMentions(formattedText);
+        formattedText = processEmoji(formattedText);
+
+        result.push(
+          <p
+            key={`p-${i}-${pIndex}`}
+            className="leading-relaxed tracking-wide whitespace-pre-wrap"
+            style={{
+              fontFamily:
+                '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+              letterSpacing: "0.025em",
+              wordSpacing: "0.05em",
+              minHeight: "1.5em", // 确保空行也有高度
+              marginBottom: "0.5em", // 统一的段落间距
+            }}
+            dangerouslySetInnerHTML={{ __html: formattedText || " " }} // 空行使用空格
+          />
         );
-      };
+      }
+    }
 
-      // 处理标签
-      const processTags = (text: string) => {
-        return text.replace(
-          /#([^#\s]+)/g,
-          '<span class="text-pink-500">#$1</span>'
-        );
-      };
-
-      // 处理@提及
-      const processMentions = (text: string) => {
-        return text.replace(
-          /@([^\s]+)/g,
-          '<span class="text-blue-500">@$1</span>'
-        );
-      };
-
-      // 处理表情符号 - 增加适当的间距
-      const processEmoji = (text: string) => {
-        return text.replace(
-          /([\u{1F300}-\u{1F9FF}])/gu,
-          '<span class="inline-block mx-0.5">$1</span>'
-        );
-      };
-
-      // 应用所有格式化
-      let formattedText = paragraph;
-      formattedText = processLinks(formattedText);
-      formattedText = processTags(formattedText);
-      formattedText = processMentions(formattedText);
-      formattedText = processEmoji(formattedText);
-
-      return (
-        <p
-          key={index}
-          className="leading-relaxed tracking-wide whitespace-pre-wrap"
-          style={{
-            fontFamily:
-              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-            letterSpacing: "0.025em",
-            wordSpacing: "0.05em",
-            minHeight: "1.5em", // 确保空行也有高度
-            marginBottom: "0.5em", // 统一的段落间距
-          }}
-          dangerouslySetInnerHTML={{ __html: formattedText || " " }} // 空行使用空格
-        />
-      );
-    });
+    return result;
   };
 
   // 检测内容是否为Markdown格式
@@ -363,6 +379,39 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
   const hasImages = currentImages && currentImages.length > 0;
   const isMarkdown = containsMarkdown(editableContent);
 
+  // 处理Markdown内容，预处理分页符
+  const processMarkdownContent = () => {
+    if (!editableContent) return editableContent;
+
+    // 分割内容为Markdown部分和分页符部分
+    const parts = editableContent.split(
+      DocumentPaginationService.PAGE_BREAK_MARKER
+    );
+
+    // 如果没有分页符，直接返回原始内容
+    if (parts.length === 1) return editableContent;
+
+    // 否则，返回预处理后的内容
+    return (
+      <>
+        {parts.map((part, index) => (
+          <React.Fragment key={`md-part-${index}`}>
+            {index > 0 && renderPageBreak(`md-${index}`)}
+            {part && (
+              <ReactMarkdown
+                className="markdown-body"
+                remarkPlugins={[remarkMath, remarkGfm]}
+                rehypePlugins={[rehypeKatex, rehypeHighlight]}
+              >
+                {part}
+              </ReactMarkdown>
+            )}
+          </React.Fragment>
+        ))}
+      </>
+    );
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
       {/* 顶部标题区域 */}
@@ -473,14 +522,22 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
               disabled={processingImages}
               style={{ lineHeight: "1.6" }}
             />
-            <div className="mt-2 text-xs text-gray-500">
-              <p>
-                提示: 编辑模式下显示文本{" "}
-                {DocumentPaginationService.PAGE_BREAK_MARKER} 表示分页符。
-              </p>
-              <p>
-                您可以直接在文本中编辑或删除这些分页符，或使用上方的插入分页符按钮添加新的分页符。
-              </p>
+            <div className="mt-3 mb-1 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <h4 className="text-sm font-medium text-blue-800 flex items-center mb-1">
+                <FiScissors className="mr-2" /> 分页符使用指南
+              </h4>
+              <div className="text-xs text-blue-700">
+                <p className="mb-2">
+                  • 编辑模式下使用文本{" "}
+                  <code className="bg-white px-2 py-0.5 rounded border border-blue-200">
+                    {DocumentPaginationService.PAGE_BREAK_MARKER}
+                  </code>{" "}
+                  表示分页符
+                </p>
+                <p>
+                  • 可以通过点击"插入分页符"按钮或直接在文本中输入来添加分页符
+                </p>
+              </div>
             </div>
           </div>
         ) : (
@@ -492,13 +549,19 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
             }}
           >
             {isMarkdown ? (
-              <ReactMarkdown
-                className="markdown-body"
-                remarkPlugins={[remarkMath, remarkGfm]}
-                rehypePlugins={[rehypeKatex, rehypeHighlight]}
-              >
-                {editableContent}
-              </ReactMarkdown>
+              editableContent.includes(
+                DocumentPaginationService.PAGE_BREAK_MARKER
+              ) ? (
+                processMarkdownContent()
+              ) : (
+                <ReactMarkdown
+                  className="markdown-body"
+                  remarkPlugins={[remarkMath, remarkGfm]}
+                  rehypePlugins={[rehypeKatex, rehypeHighlight]}
+                >
+                  {editableContent}
+                </ReactMarkdown>
+              )
             ) : (
               formatContent(editableContent)
             )}

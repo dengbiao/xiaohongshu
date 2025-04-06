@@ -4,7 +4,7 @@ import * as htmlToImage from 'html-to-image';
  * 分页文档服务 - 处理文本分页和图片生成
  */
 export class DocumentPaginationService {
-  // 定义手动分页符标记
+  // 定义手动分页符标记 - 使用更明确的标记以便更容易识别
   public static readonly PAGE_BREAK_MARKER = '---PAGE_BREAK---';
 
   /**
