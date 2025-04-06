@@ -1,12 +1,12 @@
-import React from 'react';
-import { HashRouter as Router, Routes, Route } from 'react-router-dom';
-import Layout from './components/Layout';
-import Home from './pages/Home';
-import ContentFetch from './pages/ContentFetch';
-import ContentRewrite from './pages/ContentRewrite';
-import Watermark from './pages/Watermark';
-import ExportContent from './pages/ExportContent';
-import { Toaster } from 'react-hot-toast';
+import React from "react";
+import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout";
+import Home from "./pages/Home";
+import ContentFetch from "./pages/ContentFetch";
+import ContentRewrite from "./pages/ContentRewrite";
+import Watermark from "./pages/Watermark";
+import ExportContent from "./pages/ExportContent";
+import { Toaster } from "react-hot-toast";
 
 const App: React.FC = () => {
   return (

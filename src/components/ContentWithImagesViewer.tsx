@@ -9,6 +9,14 @@ import {
   FiRotateCw,
 } from "react-icons/fi";
 import toast from "react-hot-toast";
+import ReactMarkdown from "react-markdown";
+import "katex/dist/katex.min.css";
+import "highlight.js/styles/github.css";
+import { InlineMath, BlockMath } from "react-katex";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 
 interface ContentWithImagesViewerProps {
   title: string;
@@ -32,7 +40,7 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // 格式化内容
+  // 格式化内容 - 用于非Markdown内容（兼容旧格式）
   const formatContent = (text: string) => {
     // 将制表符转换为换行符，然后按单个换行符分割
     const processedText = text.replace(/\t/g, "\n");
@@ -97,6 +105,27 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
     });
   };
 
+  // 检测内容是否为Markdown格式
+  const containsMarkdown = (text: string): boolean => {
+    // 检查是否包含常见的Markdown语法
+    const markdownPatterns = [
+      /^#+\s+.+$/m, // 标题
+      /\*\*.+?\*\*/, // 粗体
+      /\*.+?\*/, // 斜体
+      /!\[.+?\]\(.+?\)/, // 图片
+      /\[.+?\]\(.+?\)/, // 链接
+      /^>\s+.+$/m, // 引用
+      /^-\s+.+$/m, // 无序列表
+      /^[0-9]+\.\s+.+$/m, // 有序列表
+      /^```[\s\S]+?```$/m, // 代码块
+      /`[^`]+`/, // 行内代码
+      /^\|.+\|.+\|$/m, // 表格
+      /^---$/m, // 分隔线
+    ];
+
+    return markdownPatterns.some((pattern) => pattern.test(text));
+  };
+
   // 复制内容到剪贴板
   const copyToClipboard = () => {
     if (content) {
@@ -154,6 +183,7 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
   }, [activeImageIndex]);
 
   const hasImages = images && images.length > 0;
+  const isMarkdown = containsMarkdown(content);
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -204,7 +234,17 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
               '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
           }}
         >
-          {formatContent(content)}
+          {isMarkdown ? (
+            <ReactMarkdown
+              className="markdown-body"
+              remarkPlugins={[remarkMath, remarkGfm]}
+              rehypePlugins={[rehypeKatex, rehypeHighlight]}
+            >
+              {content}
+            </ReactMarkdown>
+          ) : (
+            formatContent(content)
+          )}
         </div>
       </div>
 

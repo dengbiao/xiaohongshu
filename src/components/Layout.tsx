@@ -1,8 +1,8 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { FiHome, FiLink, FiEdit, FiImage, FiDownload } from 'react-icons/fi';
-import { motion } from 'framer-motion';
-import classNames from 'classnames';
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
+import { FiHome, FiLink, FiEdit, FiImage, FiDownload } from "react-icons/fi";
+import { motion } from "framer-motion";
+import classNames from "classnames";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -10,13 +10,13 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
-  
+
   const navItems = [
-    { path: '/', icon: <FiHome size={20} />, title: '首页' },
-    { path: '/fetch', icon: <FiLink size={20} />, title: '内容抓取' },
-    { path: '/rewrite', icon: <FiEdit size={20} />, title: '内容改写' },
-    { path: '/watermark', icon: <FiImage size={20} />, title: '水印处理' },
-    { path: '/export', icon: <FiDownload size={20} />, title: '导出管理' }
+    { path: "/", icon: <FiHome size={20} />, title: "首页" },
+    { path: "/fetch", icon: <FiLink size={20} />, title: "内容抓取" },
+    { path: "/rewrite", icon: <FiEdit size={20} />, title: "内容改写" },
+    { path: "/watermark", icon: <FiImage size={20} />, title: "水印处理" },
+    { path: "/export", icon: <FiDownload size={20} />, title: "导出管理" },
   ];
 
   return (
@@ -28,10 +28,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
         <nav className="p-4">
           <ul className="space-y-2">
-            {navItems.map(item => (
+            {navItems.map((item) => (
               <li key={item.path}>
-                <Link 
-                  to={item.path} 
+                <Link
+                  to={item.path}
                   className={classNames(
                     "flex items-center p-3 rounded-lg transition-all duration-200",
                     location.pathname === item.path
@@ -55,11 +55,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </ul>
         </nav>
       </div>
-      
+
       {/* 主内容区 */}
-      <div className="flex-1 p-8 overflow-auto">
-        {children}
-      </div>
+      <div className="flex-1 p-8 overflow-auto">{children}</div>
     </div>
   );
 };
