@@ -587,6 +587,7 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
                   <img
                     src={image}
                     alt={`内容图片 ${index + 1}`}
+                    crossOrigin="anonymous"
                     className="w-full h-full object-cover"
                     loading="lazy"
                   />
@@ -657,6 +658,7 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
               <img
                 src={currentImages[activeImageIndex]}
                 alt={`全屏图片 ${activeImageIndex + 1}`}
+                crossOrigin="anonymous"
                 className="max-w-full max-h-[90vh] object-contain select-none"
                 onClick={(e) => e.stopPropagation()}
               />

@@ -258,13 +258,20 @@ const Watermark: React.FC = () => {
     }
 
     try {
-      const dataUrl = await htmlToImage.toPng(imagePreviewRef.current);
+      // 确保下载前设置了跨域配置
+      const options = {
+        cacheBust: true,
+        imagePlaceholder:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      };
+      const dataUrl = await htmlToImage.toPng(imagePreviewRef.current, options);
       const link = document.createElement("a");
       link.download = `watermarked-image-${Date.now()}.png`;
       link.href = dataUrl;
       link.click();
       toast.success("图片已下载");
     } catch (error) {
+      console.error("下载图片时出错:", error);
       toast.error("下载失败，请重试");
     }
   };
@@ -429,6 +436,7 @@ const Watermark: React.FC = () => {
                       <img
                         src={image.src}
                         alt={image.alt}
+                        crossOrigin="anonymous"
                         className="w-full h-36 object-cover transition-transform duration-700 group-hover:scale-105"
                       />
                       <div
@@ -767,6 +775,7 @@ const Watermark: React.FC = () => {
                       src={images.find((img) => img.id === selectedImage)?.src}
                       alt="预览图片"
                       className={`w-full h-full object-cover`}
+                      crossOrigin="anonymous"
                       onLoad={handleImageLoad}
                     />
 

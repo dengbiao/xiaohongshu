@@ -391,6 +391,7 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
                 <img
                   src={coverImage}
                   alt={title}
+                  crossOrigin="anonymous"
                   className="absolute inset-0 w-full h-full object-contain"
                 />
                 <div
@@ -431,6 +432,7 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
             <img
               src={coverImage}
               alt={title}
+              crossOrigin="anonymous"
               className="w-full object-contain max-h-[400px]"
             />
           </div>
@@ -477,6 +479,7 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
                 <img
                   src={image}
                   alt={`图片 ${index + 1}`}
+                  crossOrigin="anonymous"
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -503,6 +506,7 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
                   <img
                     src={image}
                     alt={`内容图片 ${index + 1}`}
+                    crossOrigin="anonymous"
                     className="w-full h-full object-cover"
                   />
                 </div>
@@ -625,6 +629,7 @@ const NoteDisplayComponent: React.FC<NoteDisplayProps> = ({
                     : images[activeImageIndex]
                 }
                 alt={`全屏图片 ${activeImageIndex + 1}`}
+                crossOrigin="anonymous"
                 className="max-w-full max-h-[90vh] object-contain select-none"
                 onClick={(e) => e.stopPropagation()}
               />

@@ -159,6 +159,7 @@ const DocumentPageViewer: React.FC<DocumentPageViewerProps> = ({
               <img
                 src={images[currentPage]}
                 alt={`页面 ${currentPage + 1}`}
+                crossOrigin="anonymous"
                 className={styles.pageImage}
                 loading="lazy"
                 onError={(e) => {
