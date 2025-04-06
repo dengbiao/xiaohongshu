@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { FetchItem } from './fetchStore';
-import { redBookRewriteService, RewrittenNote } from '../services/RedBookRewriteService';
-import { ScrapedNote } from '../services/RedBookScraperService';
+import { redBookRewriteService } from '../services/RedBookRewriteService';
 
 export type RewriteSettings = {
   style: string;
-  differenceRate: number;
+  stylePriority: string;
+  structurePriority: string;
   lengthAdjustment: number;
   keywords: string[];
   batchCount: number;
@@ -16,154 +16,210 @@ export type RewrittenItem = {
   originalItemId: number; // 原始笔记的ID
   title: string;
   content: string;
-  abstract?: string; 
-  imageCount?: number;
-  generatedImages?: string[]; // 从内容生成的图片
-  contentPages?: string[]; // 分页内容
+  abstract?: string;
+  contentPages?: string[];
+  generatedImages?: string[];
+  version: number; // 版本号
+  createdAt: number; // 创建时间戳
+  status: RewriteStatus; // 改写状态
 };
 
-// 改写状态映射：ID -> 状态
-export type RewriteStatusMap = {
-  [originalItemId: number]: boolean; // true表示正在改写，false表示改写完成
-};
+// 改写状态定义
+export type RewriteStatus = "rewriting" | "success" | "error";
+
+// 改写状态映射，用于跟踪每个原始内容的改写状态
+type RewriteStatusMap = Record<number, RewriteStatus>;
+
+// 创建用于传递给改写服务的笔记对象
+interface NoteToRewrite {
+  id: number;
+  title: string;
+  content: string;
+  author?: string;
+  url?: string;
+  images?: string[];
+}
 
 type RewriteStore = {
   rewriteSettings: RewriteSettings;
   rewrittenItems: RewrittenItem[];
-  rewriteStatusMap: RewriteStatusMap; // 记录每个笔记的改写状态
+  rewriteStatusMap: RewriteStatusMap;
   updateSettings: (settings: Partial<RewriteSettings>) => void;
   rewriteContent: (item: FetchItem) => void;
+  updateRewrittenItem: (id: number, updates: Partial<RewrittenItem>) => void;
   clearRewrittenItems: () => void;
-  updateRewrittenItem: (id: number, updatedItem: Partial<RewrittenItem>) => void;
-  getRewrittenItemByOriginalId: (originalItemId: number) => RewrittenItem | undefined;
+  getRewrittenItemsByOriginalId: (originalItemId: number) => RewrittenItem[];
+  getLatestRewrittenItemByOriginalId: (originalItemId: number) => RewrittenItem | undefined;
+  getRewrittenVersionCount: (originalItemId: number) => number;
   isItemRewriting: (originalItemId: number) => boolean;
 };
 
 export const useRewriteStore = create<RewriteStore>((set, get) => ({
   rewriteSettings: {
-    style: 'casual',
-    differenceRate: 40,
+    style: 'professional',
+    stylePriority: 'medium',
+    structurePriority: 'high',
     lengthAdjustment: 0,
     keywords: [],
-    batchCount: 1
+    batchCount: 1,
   },
   rewrittenItems: [],
   rewriteStatusMap: {},
-  
+
+  // 更新设置
   updateSettings: (settings) => {
     set((state) => ({
-      rewriteSettings: { ...state.rewriteSettings, ...settings }
+      rewriteSettings: {
+        ...state.rewriteSettings,
+        ...settings
+      }
     }));
   },
-  
-  rewriteContent: async (item) => {
-    if (!item.content) return;
-    
-    // 更新当前笔记的改写状态为"改写中"
-    set((state) => ({
-      rewriteStatusMap: { 
-        ...state.rewriteStatusMap, 
-        [item.id]: true 
-      }
-    }));
-    
-    try {
-      const { batchCount } = get().rewriteSettings;
-      const newItems = [];
+
+  // 改写内容
+  rewriteContent: async (item: FetchItem) => {
+    // 获取该原始内容的最新版本号
+    const originalId = item.id;
+    const existingVersions = get().rewrittenItems
+      .filter(rewrittenItem => rewrittenItem.originalItemId === originalId)
+      .map(rewrittenItem => rewrittenItem.version);
       
-      // 构建用于改写的笔记对象
-      const note: ScrapedNote = {
-        id: String(item.id), // 转换为字符串类型
-        title: item.title || '',
-        content: item.content,
-        coverImage: item.images?.[0] || '', // 使用第一张图片作为封面
-        images: item.images || [],
-        imagesText: item.imagesText || [],
-        likes: item.likes || 0,
-        comments: item.comments || 0,
-        authorName: item.author || '',
-        authorAvatar: '',
-        publishTime: item.publishTime || new Date().toISOString().split('T')[0]
+    // 如果没有版本，则从1开始，否则取最大版本号+1
+    const newVersion = existingVersions.length > 0 
+      ? Math.max(...existingVersions) + 1 
+      : 1;
+    
+    // 创建一个"改写中"状态的版本
+    const inProgressItem: RewrittenItem = {
+      id: Date.now(),
+      originalItemId: item.id,
+      title: item.title,
+      content: item.content || '正在改写中...',
+      abstract: (item.content || '').substring(0, 150) + "...",
+      version: newVersion,
+      createdAt: Date.now(),
+      status: "rewriting"
+    };
+
+    // 立即添加改写中的版本
+    set((state) => {
+      return {
+        rewrittenItems: [...state.rewrittenItems, inProgressItem],
+        rewriteStatusMap: { 
+          ...state.rewriteStatusMap, 
+          [item.id]: "rewriting" 
+        }
       };
+    });
+
+    try {
+      // 准备原始内容数据
+      const noteToRewrite: NoteToRewrite = {
+        id: item.id,
+        title: item.title,
+        content: item.content || '',
+        author: item.author || '',
+        url: item.url || '',
+        images: item.images || []
+      };
+
+      // 在rewriteStore中获取设置并直接在服务中使用
+      const settings = get().rewriteSettings;
       
-      // 使用改写服务进行内容改写
-      for (let i = 0; i < batchCount; i++) {
-        try {
-          // 调用改写服务
-          const rewrittenNote = await redBookRewriteService.rewriteNote(note);
-          
-          if (rewrittenNote) {
-            newItems.push({
-              id: Date.now() + i,
-              originalItemId: item.id, // 保存原始笔记的ID
-              title: rewrittenNote.title,
-              content: rewrittenNote.content,
-              abstract: rewrittenNote.abstract,
-              imageCount: note.images.length,
-              generatedImages: rewrittenNote.generatedImages,
-              contentPages: rewrittenNote.contentPages
-            });
-          }
-        } catch (error) {
-          console.error('改写内容时出错:', error);
-        }
-        
-        // 在多个版本之间添加小延迟
-        if (i < batchCount - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
+      // 执行改写API调用，始终使用原始内容进行改写
+      const result = await redBookRewriteService.rewriteNote({
+        id: String(noteToRewrite.id),
+        title: noteToRewrite.title,
+        content: noteToRewrite.content,
+        coverImage: noteToRewrite.images?.[0] || '',
+        images: noteToRewrite.images || [],
+        imagesText: item.imagesText || [],
+        likes: 0,
+        comments: 0,
+        authorName: noteToRewrite.author || '',
+        authorAvatar: '',
+        publishTime: new Date().toISOString().split('T')[0]
+      });
       
-      // 更新改写结果，并将当前笔记的改写状态设为完成
+      // 生成摘要和内容页面
+      const abstract = result.content.substring(0, 150) + "...";
+      const contentPages = result.content
+        .split("\n\n")
+        .filter((paragraph) => paragraph.trim().length > 0);
+
+      // 更新刚才创建的改写中的版本
       set((state) => {
-        // 移除原有的同一笔记的改写结果
-        const filteredItems = state.rewrittenItems.filter(
-          item => !newItems.some(newItem => newItem.originalItemId === item.originalItemId)
-        );
-        
         return {
-          rewrittenItems: [...newItems, ...filteredItems],
+          rewrittenItems: state.rewrittenItems.map(item => 
+            item.id === inProgressItem.id 
+              ? {
+                  ...item,
+                  title: result.title,
+                  content: result.content,
+                  abstract,
+                  contentPages,
+                  generatedImages: result.generatedImages || [],
+                  status: "success"
+                }
+              : item
+          ),
           rewriteStatusMap: { 
             ...state.rewriteStatusMap, 
-            [item.id]: false // 改写完成
+            [item.id]: "success" 
           }
         };
       });
     } catch (error) {
-      console.error('改写内容时出错:', error);
-      // 更新当前笔记的改写状态为"完成"（即使出错）
+      console.error('改写错误:', error);
+      // 更新为错误状态
       set((state) => ({
+        rewrittenItems: state.rewrittenItems.map(item => 
+          item.id === inProgressItem.id 
+            ? { ...item, status: "error" }
+            : item
+        ),
         rewriteStatusMap: { 
           ...state.rewriteStatusMap, 
-          [item.id]: false 
+          [item.id]: "error" 
         }
       }));
     }
   },
-  
-  clearRewrittenItems: () => {
-    set({ 
-      rewrittenItems: [],
-      rewriteStatusMap: {}
-    });
-  },
 
-  // 更新指定ID的改写内容
-  updateRewrittenItem: (id: number, updatedItem: Partial<RewrittenItem>) => {
+  // 更新已有的改写项
+  updateRewrittenItem: (id, updates) => {
     set((state) => ({
-      rewrittenItems: state.rewrittenItems.map(item => 
-        item.id === id ? { ...item, ...updatedItem } : item
-      )
+      rewrittenItems: state.rewrittenItems.map(item =>
+        item.id === id ? { ...item, ...updates } : item
+      ),
     }));
   },
-  
-  // 根据原始笔记ID获取对应的改写结果
-  getRewrittenItemByOriginalId: (originalItemId: number) => {
-    return get().rewrittenItems.find(item => item.originalItemId === originalItemId);
+
+  // 清除所有改写项
+  clearRewrittenItems: () => {
+    set({ rewrittenItems: [], rewriteStatusMap: {} });
   },
-  
+
+  // 获取指定原始笔记ID的所有改写版本，按版本号排序
+  getRewrittenItemsByOriginalId: (originalItemId: number) => {
+    return get().rewrittenItems.filter(item => item.originalItemId === originalItemId)
+      .sort((a, b) => b.version - a.version); // 按版本号降序排序
+  },
+
+  // 获取指定原始笔记ID的改写版本数量
+  getRewrittenVersionCount: (originalItemId: number) => {
+    return get().rewrittenItems.filter(item => item.originalItemId === originalItemId).length;
+  },
+
+  // 获取指定原始笔记ID的最新改写版本
+  getLatestRewrittenItemByOriginalId: (originalItemId: number) => {
+    const items = get().rewrittenItems.filter(item => item.originalItemId === originalItemId)
+      .sort((a, b) => b.version - a.version);
+    return items.length > 0 ? items[0] : undefined;
+  },
+
   // 检查指定原始笔记ID是否正在改写中
   isItemRewriting: (originalItemId: number) => {
-    return !!get().rewriteStatusMap[originalItemId];
-  }
+    return get().rewriteStatusMap[originalItemId] === "rewriting";
+  },
 }));

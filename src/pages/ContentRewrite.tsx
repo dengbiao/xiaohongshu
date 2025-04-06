@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   FiEdit,
@@ -8,28 +8,50 @@ import {
   FiSettings,
   FiFileText,
   FiImage,
+  FiChevronDown,
+  FiList,
+  FiClock,
+  FiAlertCircle,
+  FiLoader,
 } from "react-icons/fi";
 import toast from "react-hot-toast";
-import { useRewriteStore } from "../stores/rewriteStore";
+import {
+  useRewriteStore,
+  RewrittenItem,
+  RewriteStatus,
+} from "../stores/rewriteStore";
 import { useFetchStore, FetchItem } from "../stores/fetchStore";
 import RewriteSettingsModal from "../components/RewriteSettingsModal";
 import NoteDisplayComponent from "../components/NoteDisplayComponent";
 import ContentWithImagesViewer from "../components/ContentWithImagesViewer";
-import { ScrapedNote } from "../services/RedBookScraperService";
 
 const ContentRewrite: React.FC = () => {
   const [selectedContent, setSelectedContent] = useState<number | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState("original");
+  const [activeVersion, setActiveVersion] = useState<number | null>(null);
+  const [showVersionDropdown, setShowVersionDropdown] = useState(false);
 
   const { fetchedItems } = useFetchStore();
   const {
     rewriteContent,
     rewrittenItems,
     updateRewrittenItem,
-    getRewrittenItemByOriginalId,
+    getRewrittenItemsByOriginalId,
+    getLatestRewrittenItemByOriginalId,
     isItemRewriting,
+    getRewrittenVersionCount,
   } = useRewriteStore();
+
+  // 当选择的内容改变时，重置选中的版本为最新
+  useEffect(() => {
+    if (selectedContent !== null) {
+      const latestItem = getLatestRewrittenItemByOriginalId(selectedContent);
+      setActiveVersion(latestItem?.version || null);
+    } else {
+      setActiveVersion(null);
+    }
+  }, [selectedContent, getLatestRewrittenItemByOriginalId]);
 
   // Mock content for demo with proper typing
   const fetchedContent: FetchItem[] =
@@ -75,8 +97,14 @@ const ContentRewrite: React.FC = () => {
 
     // 如果这个ID的内容已经有改写结果，则切换到改写结果标签页
     // 否则切换到原始内容标签页
-    const rewrittenItem = getRewrittenItemByOriginalId(id);
-    setActiveTab(rewrittenItem ? "rewritten" : "original");
+    const versions = getRewrittenItemsByOriginalId(id);
+    if (versions.length > 0) {
+      setActiveTab("rewritten");
+      setActiveVersion(versions[0].version);
+    } else {
+      setActiveTab("original");
+      setActiveVersion(null);
+    }
   };
 
   const handleRewrite = () => {
@@ -91,18 +119,68 @@ const ContentRewrite: React.FC = () => {
     if (!contentToRewrite) return;
 
     rewriteContent(contentToRewrite);
-    toast.success("内容正在改写中...");
+    toast.success("内容正在改写中，已创建新版本");
 
-    // 添加一个计时器，当改写开始后，等待一小段时间再切换到改写结果标签
-    // 这样用户会感觉更流畅，知道改写正在进行
+    // 一旦开始改写，立即切换到改写结果标签，因为已经创建了一个"改写中"的版本
+    setActiveTab("rewritten");
+
+    // 设置活动版本为最新版本
     setTimeout(() => {
-      setActiveTab("rewritten");
-    }, 500);
+      const latestItem = getLatestRewrittenItemByOriginalId(selectedContent);
+      if (latestItem) {
+        setActiveVersion(latestItem.version);
+      }
+    }, 100);
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("已复制到剪贴板");
+  };
+
+  // 选择版本
+  const handleSelectVersion = (version: number) => {
+    setActiveVersion(version);
+    setShowVersionDropdown(false);
+  };
+
+  // 格式化日期时间
+  const formatDateTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString("zh-CN", {
+      month: "numeric",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  // 获取版本状态对应的标签和图标
+  const getStatusIcon = (status: RewriteStatus) => {
+    switch (status) {
+      case "rewriting":
+        return <FiLoader size={14} className="animate-spin mr-1" />;
+      case "success":
+        return <FiCheck size={14} className="mr-1 text-green-500" />;
+      case "error":
+        return <FiAlertCircle size={14} className="mr-1 text-red-500" />;
+      default:
+        return null;
+    }
+  };
+
+  // 获取版本状态的文字描述
+  const getStatusText = (status: RewriteStatus) => {
+    switch (status) {
+      case "rewriting":
+        return "正在改写...";
+      case "success":
+        return "改写完成";
+      case "error":
+        return "改写失败";
+      default:
+        return "";
+    }
   };
 
   // Find the selected content item
@@ -115,10 +193,16 @@ const ContentRewrite: React.FC = () => {
   const isCurrentItemRewriting =
     selectedContent !== null && isItemRewriting(selectedContent);
 
-  // 获取当前选中内容的改写结果
-  const currentRewrittenItem =
+  // 获取当前选中内容的所有改写版本
+  const currentRewrittenVersions =
     selectedContent !== null
-      ? getRewrittenItemByOriginalId(selectedContent)
+      ? getRewrittenItemsByOriginalId(selectedContent)
+      : [];
+
+  // 获取当前选中的改写版本
+  const currentRewrittenItem =
+    activeVersion !== null
+      ? currentRewrittenVersions.find((item) => item.version === activeVersion)
       : undefined;
 
   // 组装完整的改写结果项用于显示
@@ -184,7 +268,7 @@ const ContentRewrite: React.FC = () => {
               <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
                 {fetchedContent.map((item) => {
                   // 检查每个item是否有改写结果或正在改写中
-                  const hasRewritten = !!getRewrittenItemByOriginalId(item.id);
+                  const versionCount = getRewrittenVersionCount(item.id);
                   const isRewriting = isItemRewriting(item.id);
 
                   return (
@@ -206,13 +290,15 @@ const ContentRewrite: React.FC = () => {
 
                       {/* 显示改写状态标记 */}
                       {isRewriting && (
-                        <span className="absolute right-2 top-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                        <span className="absolute right-2 top-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full flex items-center">
+                          <FiLoader size={12} className="mr-1 animate-spin" />
                           改写中...
                         </span>
                       )}
-                      {hasRewritten && !isRewriting && (
-                        <span className="absolute right-2 top-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                          已改写
+                      {versionCount > 0 && !isRewriting && (
+                        <span className="absolute right-2 top-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full flex items-center">
+                          <FiList size={12} className="mr-1" />
+                          {versionCount}个版本
                         </span>
                       )}
                     </div>
@@ -223,10 +309,10 @@ const ContentRewrite: React.FC = () => {
               <div className="mt-6">
                 <button
                   onClick={handleRewrite}
-                  disabled={isCurrentItemRewriting || selectedContent === null}
+                  disabled={selectedContent === null}
                   className="w-full px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium rounded-lg shadow hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isCurrentItemRewriting ? "改写中..." : "开始智能改写"}
+                  {isCurrentItemRewriting ? "再次改写" : "开始智能改写"}
                 </button>
               </div>
             </div>
@@ -235,27 +321,89 @@ const ContentRewrite: React.FC = () => {
           {/* 右侧 - 改写结果 */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-lg p-6 h-full">
-              <div className="flex border-b mb-4">
-                <button
-                  className={`px-4 py-2 font-medium ${
-                    activeTab === "original"
-                      ? "text-pink-600 border-b-2 border-pink-600"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                  onClick={() => setActiveTab("original")}
-                >
-                  原始内容
-                </button>
-                <button
-                  className={`px-4 py-2 font-medium ${
-                    activeTab === "rewritten"
-                      ? "text-pink-600 border-b-2 border-pink-600"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                  onClick={() => setActiveTab("rewritten")}
-                >
-                  改写结果
-                </button>
+              <div className="flex border-b mb-4 justify-between">
+                <div className="flex">
+                  <button
+                    className={`px-4 py-2 font-medium ${
+                      activeTab === "original"
+                        ? "text-pink-600 border-b-2 border-pink-600"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                    onClick={() => setActiveTab("original")}
+                  >
+                    原始内容
+                  </button>
+                  <button
+                    className={`px-4 py-2 font-medium ${
+                      activeTab === "rewritten"
+                        ? "text-pink-600 border-b-2 border-pink-600"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                    onClick={() => setActiveTab("rewritten")}
+                  >
+                    改写结果
+                  </button>
+                </div>
+
+                {/* 版本选择下拉菜单 */}
+                {activeTab === "rewritten" &&
+                  currentRewrittenVersions.length > 0 && (
+                    <div className="relative">
+                      <button
+                        onClick={() =>
+                          setShowVersionDropdown(!showVersionDropdown)
+                        }
+                        className="flex items-center px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700"
+                      >
+                        <FiClock size={14} className="mr-2" />
+                        版本 {activeVersion || "未选择"}
+                        <FiChevronDown size={14} className="ml-2" />
+                      </button>
+
+                      {showVersionDropdown && (
+                        <div className="absolute top-full right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-10 w-60">
+                          <div className="py-1 max-h-60 overflow-y-auto">
+                            {currentRewrittenVersions.map((version) => (
+                              <button
+                                key={version.id}
+                                onClick={() =>
+                                  handleSelectVersion(version.version)
+                                }
+                                className={`flex items-center justify-between w-full px-4 py-2 text-sm ${
+                                  activeVersion === version.version
+                                    ? "bg-pink-50 text-pink-600"
+                                    : "hover:bg-gray-100 text-gray-700"
+                                }`}
+                              >
+                                <div className="flex items-center">
+                                  {getStatusIcon(version.status)}
+                                  <span className="font-medium">
+                                    版本 {version.version}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col items-end">
+                                  <span className="text-xs text-gray-500">
+                                    {formatDateTime(version.createdAt)}
+                                  </span>
+                                  <span
+                                    className={`text-xs ${
+                                      version.status === "rewriting"
+                                        ? "text-yellow-500"
+                                        : version.status === "success"
+                                        ? "text-green-500"
+                                        : "text-red-500"
+                                    }`}
+                                  >
+                                    {getStatusText(version.status)}
+                                  </span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
               </div>
 
               {selectedContent !== null ? (
@@ -283,14 +431,53 @@ const ContentRewrite: React.FC = () => {
 
                   {activeTab === "rewritten" && (
                     <div className="prose max-w-none">
-                      {rewrittenItemToDisplay ? (
+                      {currentRewrittenItem ? (
                         <div className="relative">
-                          {rewrittenItemToDisplay.contentPages &&
-                          rewrittenItemToDisplay.generatedImages ? (
+                          {/* 如果状态是"改写中"，显示加载指示器 */}
+                          {currentRewrittenItem.status === "rewriting" ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                              <FiLoader
+                                size={48}
+                                className="mb-4 animate-spin text-pink-500"
+                              />
+                              <p className="text-center">
+                                内容正在改写中，请稍候...
+                              </p>
+                              {currentRewrittenItem.content !==
+                                "正在改写中..." && (
+                                <div className="mt-4 p-4 bg-gray-50 rounded-lg w-full">
+                                  <h3 className="text-lg font-medium text-gray-800 mb-2">
+                                    {currentRewrittenItem.title}
+                                  </h3>
+                                  <p className="text-gray-600">
+                                    {currentRewrittenItem.abstract}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          ) : currentRewrittenItem.status === "error" ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+                              <FiAlertCircle
+                                size={48}
+                                className="mb-4 text-red-500"
+                              />
+                              <p className="text-center">
+                                改写过程中出现错误，请重试
+                              </p>
+                              <button
+                                onClick={handleRewrite}
+                                className="mt-4 px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
+                              >
+                                重新改写
+                              </button>
+                            </div>
+                          ) : rewrittenItemToDisplay &&
+                            currentRewrittenItem.contentPages &&
+                            currentRewrittenItem.generatedImages ? (
                             <ContentWithImagesViewer
                               title={rewrittenItemToDisplay.title}
                               content={rewrittenItemToDisplay.content}
-                              images={rewrittenItemToDisplay.generatedImages}
+                              images={currentRewrittenItem.generatedImages}
                               abstract={rewrittenItemToDisplay.abstract}
                               onRewrite={handleRewrite}
                               onContentChange={handleContentUpdate}
@@ -298,13 +485,13 @@ const ContentRewrite: React.FC = () => {
                           ) : (
                             <>
                               <NoteDisplayComponent
-                                note={rewrittenItemToDisplay}
+                                note={rewrittenItemToDisplay!}
                                 showFullContent={true}
                               />
                               <div className="absolute top-4 right-4 flex space-x-2">
                                 <button
                                   onClick={() => {
-                                    if (rewrittenItemToDisplay.content)
+                                    if (rewrittenItemToDisplay?.content)
                                       copyToClipboard(
                                         rewrittenItemToDisplay.content
                                       );
@@ -316,7 +503,6 @@ const ContentRewrite: React.FC = () => {
                                 </button>
                                 <button
                                   onClick={handleRewrite}
-                                  disabled={isCurrentItemRewriting}
                                   className="p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-pink-600 transition-colors duration-200"
                                   title="重新改写"
                                 >
