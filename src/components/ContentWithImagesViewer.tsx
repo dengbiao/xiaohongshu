@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiCopy,
@@ -7,6 +7,8 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiRotateCw,
+  FiScissors,
+  FiSave,
 } from "react-icons/fi";
 import toast from "react-hot-toast";
 import ReactMarkdown from "react-markdown";
@@ -17,6 +19,10 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import {
+  DocumentPaginationService,
+  documentPaginationService,
+} from "../services/DocumentPaginationService";
 
 interface ContentWithImagesViewerProps {
   title: string;
@@ -24,6 +30,7 @@ interface ContentWithImagesViewerProps {
   images: string[];
   abstract?: string;
   onRewrite?: () => void;
+  onContentChange?: (updatedContent: string, updatedImages: string[]) => void;
 }
 
 /**
@@ -36,9 +43,20 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
   images,
   abstract,
   onRewrite,
+  onContentChange,
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editableContent, setEditableContent] = useState(content);
+  const [processingImages, setProcessingImages] = useState(false);
+  const [currentImages, setCurrentImages] = useState(images);
+
+  // 当外部content变化时，更新内部状态
+  useEffect(() => {
+    setEditableContent(content);
+    setCurrentImages(images);
+  }, [content, images]);
 
   // 格式化内容 - 用于非Markdown内容（兼容旧格式）
   const formatContent = (text: string) => {
@@ -48,6 +66,22 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
     const paragraphs = processedText.split("\n");
 
     return paragraphs.map((paragraph, index) => {
+      // 检查是否为分页符
+      if (paragraph.trim() === DocumentPaginationService.PAGE_BREAK_MARKER) {
+        return (
+          <div key={`pagebreak-${index}`} className="w-full my-8 py-1 relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="border-t border-gray-300 flex-grow"></div>
+            </div>
+            <div className="relative flex justify-center">
+              <span className="bg-white px-4 text-sm text-gray-500 flex items-center">
+                <FiScissors className="mr-2" size={14} /> 分页符
+              </span>
+            </div>
+          </div>
+        );
+      }
+
       // 处理链接
       const processLinks = (text: string) => {
         return text.replace(
@@ -151,15 +185,20 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
 
   // 导航到上一张或下一张图片
   const navigateImage = (direction: "prev" | "next") => {
-    if (activeImageIndex === null || !images || images.length === 0) return;
+    if (
+      activeImageIndex === null ||
+      !currentImages ||
+      currentImages.length === 0
+    )
+      return;
 
     if (direction === "prev") {
       setActiveImageIndex(
-        activeImageIndex === 0 ? images.length - 1 : activeImageIndex - 1
+        activeImageIndex === 0 ? currentImages.length - 1 : activeImageIndex - 1
       );
     } else {
       setActiveImageIndex(
-        activeImageIndex === images.length - 1 ? 0 : activeImageIndex + 1
+        activeImageIndex === currentImages.length - 1 ? 0 : activeImageIndex + 1
       );
     }
   };
@@ -182,8 +221,147 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeImageIndex]);
 
-  const hasImages = images && images.length > 0;
-  const isMarkdown = containsMarkdown(content);
+  // 插入分页符
+  const insertPageBreak = () => {
+    // 在编辑模式下，使用textarea的selectionStart和selectionEnd属性
+    if (isEditMode) {
+      const textarea = document.querySelector(
+        "textarea"
+      ) as HTMLTextAreaElement;
+      if (!textarea) return;
+
+      // 保存当前滚动位置
+      const scrollTop = textarea.scrollTop;
+
+      const { selectionStart, selectionEnd } = textarea;
+      const beforeText = editableContent.substring(0, selectionStart);
+      const afterText = editableContent.substring(selectionEnd);
+
+      // 插入分页符
+      const updatedContent =
+        beforeText +
+        "\n" +
+        DocumentPaginationService.PAGE_BREAK_MARKER +
+        "\n" +
+        afterText;
+      setEditableContent(updatedContent);
+
+      // 设置光标到分页符后面并恢复滚动位置
+      setTimeout(() => {
+        textarea.focus();
+        const newCursorPos =
+          selectionStart +
+          DocumentPaginationService.PAGE_BREAK_MARKER.length +
+          2;
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+
+        // 恢复滚动位置
+        textarea.scrollTop = scrollTop;
+      }, 10);
+
+      toast.success("已插入分页符");
+      return;
+    }
+
+    // 以下是非编辑模式下的旧逻辑，但实际上在非编辑模式下不应该调用此函数
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount) return;
+
+    // 获取当前选区
+    const range = selection.getRangeAt(0);
+    const startNode = range.startContainer;
+
+    // 找到光标位置对应的段落
+    let paragraphElement = startNode;
+    if (startNode.nodeType === Node.TEXT_NODE) {
+      paragraphElement = startNode.parentElement;
+    }
+
+    // 找到包含段落的父容器
+    while (
+      paragraphElement &&
+      paragraphElement.nodeName !== "P" &&
+      paragraphElement.nodeName !== "DIV"
+    ) {
+      paragraphElement = paragraphElement.parentElement;
+    }
+
+    if (!paragraphElement) {
+      toast.error("无法确定插入位置，请尝试重新选择");
+      return;
+    }
+
+    // 在文本中插入分页符
+    const caretPosition = range.startOffset;
+    const beforeText = editableContent.substring(0, caretPosition);
+    const afterText = editableContent.substring(caretPosition);
+
+    // 插入分页符
+    const updatedContent =
+      beforeText +
+      "\n" +
+      DocumentPaginationService.PAGE_BREAK_MARKER +
+      "\n" +
+      afterText;
+    setEditableContent(updatedContent);
+
+    toast.success("已插入分页符");
+  };
+
+  // 移除分页符
+  const handleRemovePageBreak = (index: number) => {
+    // 将内容分割为行
+    const lines = editableContent.split("\n");
+
+    // 找到并移除分页符
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim() === DocumentPaginationService.PAGE_BREAK_MARKER) {
+        if (index === 0) {
+          // 移除这一行
+          lines.splice(i, 1);
+          break;
+        }
+        index--;
+      }
+    }
+
+    // 重新组合内容
+    const updatedContent = lines.join("\n");
+    setEditableContent(updatedContent);
+
+    toast.success("已移除分页符");
+  };
+
+  // 保存更新的内容
+  const saveContent = async () => {
+    setProcessingImages(true);
+
+    try {
+      // 开始处理更新后的内容，重新生成分页和图片
+      const result = await documentPaginationService.reprocessContent(
+        editableContent,
+        currentImages
+      );
+
+      setCurrentImages(result.images);
+
+      // 如果有回调函数，通知父组件内容已更新
+      if (onContentChange) {
+        onContentChange(editableContent, result.images);
+      }
+
+      toast.success("内容已更新，图片已重新生成");
+      setIsEditMode(false);
+    } catch (error) {
+      console.error("更新内容时出错:", error);
+      toast.error("更新内容时出错，请重试");
+    } finally {
+      setProcessingImages(false);
+    }
+  };
+
+  const hasImages = currentImages && currentImages.length > 0;
+  const isMarkdown = containsMarkdown(editableContent);
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -203,49 +381,129 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
           <p className="text-gray-500 mt-2 mb-2 text-base italic">{abstract}</p>
         )}
         <div className="flex justify-end space-x-2">
-          <button
-            onClick={copyToClipboard}
-            className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm transition-colors"
-            title="复制内容"
-          >
-            {copied ? <FiCheck size={14} /> : <FiCopy size={14} />}
-            <span>{copied ? "已复制" : "复制内容"}</span>
-          </button>
+          {/* 编辑模式切换按钮 */}
+          {!isEditMode ? (
+            <>
+              <button
+                onClick={() => setIsEditMode(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md text-sm transition-colors"
+                title="编辑内容"
+              >
+                <FiScissors size={14} />
+                <span>编辑分页</span>
+              </button>
 
-          {onRewrite && (
-            <button
-              onClick={onRewrite}
-              className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm transition-colors"
-              title="重新改写"
-            >
-              <FiRotateCw size={14} />
-              <span>重新改写</span>
-            </button>
+              <button
+                onClick={copyToClipboard}
+                className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm transition-colors"
+                title="复制内容"
+              >
+                {copied ? <FiCheck size={14} /> : <FiCopy size={14} />}
+                <span>{copied ? "已复制" : "复制内容"}</span>
+              </button>
+
+              {onRewrite && (
+                <button
+                  onClick={onRewrite}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm transition-colors"
+                  title="重新改写"
+                >
+                  <FiRotateCw size={14} />
+                  <span>重新改写</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={insertPageBreak}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-md text-sm transition-colors"
+                title="插入分页符"
+                disabled={processingImages}
+              >
+                <FiScissors size={14} />
+                <span>插入分页符</span>
+              </button>
+
+              <button
+                onClick={saveContent}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 rounded-md text-sm transition-colors"
+                title="保存更改"
+                disabled={processingImages}
+              >
+                {processingImages ? (
+                  <>
+                    <span className="animate-spin mr-1">⟳</span>
+                    <span>处理中...</span>
+                  </>
+                ) : (
+                  <>
+                    <FiSave size={14} />
+                    <span>保存更改</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  setEditableContent(content);
+                  setIsEditMode(false);
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-sm transition-colors"
+                title="取消编辑"
+                disabled={processingImages}
+              >
+                <FiX size={14} />
+                <span>取消</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
       {/* 内容区域 */}
       <div className="p-6">
-        <div
-          className="text-gray-800 prose max-w-none"
-          style={{
-            fontFamily:
-              '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-          }}
-        >
-          {isMarkdown ? (
-            <ReactMarkdown
-              className="markdown-body"
-              remarkPlugins={[remarkMath, remarkGfm]}
-              rehypePlugins={[rehypeKatex, rehypeHighlight]}
-            >
-              {content}
-            </ReactMarkdown>
-          ) : (
-            formatContent(content)
-          )}
-        </div>
+        {isEditMode ? (
+          <div className="relative">
+            <textarea
+              value={editableContent}
+              onChange={(e) => setEditableContent(e.target.value)}
+              className="w-full h-[500px] p-4 border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-300 focus:border-pink-500 outline-none resize-y font-mono text-sm"
+              placeholder="在此编辑内容..."
+              disabled={processingImages}
+              style={{ lineHeight: "1.6" }}
+            />
+            <div className="mt-2 text-xs text-gray-500">
+              <p>
+                提示: 编辑模式下显示文本{" "}
+                {DocumentPaginationService.PAGE_BREAK_MARKER} 表示分页符。
+              </p>
+              <p>
+                您可以直接在文本中编辑或删除这些分页符，或使用上方的插入分页符按钮添加新的分页符。
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="text-gray-800 prose max-w-none"
+            style={{
+              fontFamily:
+                '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+            }}
+          >
+            {isMarkdown ? (
+              <ReactMarkdown
+                className="markdown-body"
+                remarkPlugins={[remarkMath, remarkGfm]}
+                rehypePlugins={[rehypeKatex, rehypeHighlight]}
+              >
+                {editableContent}
+              </ReactMarkdown>
+            ) : (
+              formatContent(editableContent)
+            )}
+          </div>
+        )}
       </div>
 
       {/* 底部图片网格 */}
@@ -253,7 +511,7 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
         <div className="px-6 pb-6">
           <h4 className="text-sm font-medium text-gray-700 mb-3">内容图片</h4>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {images.map((image, index) => (
+            {currentImages.map((image, index) => (
               <div
                 key={`img-${index}`}
                 className="relative bg-gray-100 rounded-lg overflow-hidden cursor-pointer hover:opacity-95 transition-opacity duration-200 shadow-md"
@@ -331,7 +589,7 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
               transition={{ duration: 0.15 }}
             >
               <img
-                src={images[activeImageIndex]}
+                src={currentImages[activeImageIndex]}
                 alt={`全屏图片 ${activeImageIndex + 1}`}
                 className="max-w-full max-h-[90vh] object-contain select-none"
                 onClick={(e) => e.stopPropagation()}
@@ -340,7 +598,7 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
 
             {/* 图片计数器 */}
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black/50 px-4 py-2 rounded-full backdrop-blur-sm">
-              {activeImageIndex + 1} / {images.length}
+              {activeImageIndex + 1} / {currentImages.length}
             </div>
 
             {/* 键盘快捷键提示 */}

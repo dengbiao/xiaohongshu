@@ -28,6 +28,7 @@ type RewriteStore = {
   updateSettings: (settings: Partial<RewriteSettings>) => void;
   rewriteContent: (item: FetchItem) => void;
   clearRewrittenItems: () => void;
+  updateRewrittenItem: (id: number, updatedItem: Partial<RewrittenItem>) => void;
 };
 
 export const useRewriteStore = create<RewriteStore>((set, get) => ({
@@ -110,5 +111,14 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
   
   clearRewrittenItems: () => {
     set({ rewrittenItems: [] });
+  },
+
+  // 更新指定ID的改写内容
+  updateRewrittenItem: (id: number, updatedItem: Partial<RewrittenItem>) => {
+    set((state) => ({
+      rewrittenItems: state.rewrittenItems.map(item => 
+        item.id === id ? { ...item, ...updatedItem } : item
+      )
+    }));
   }
 }));

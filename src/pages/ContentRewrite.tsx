@@ -23,7 +23,8 @@ const ContentRewrite: React.FC = () => {
   const [activeTab, setActiveTab] = useState("original");
 
   const { fetchedItems } = useFetchStore();
-  const { rewriteContent, rewrittenItems, isRewriting } = useRewriteStore();
+  const { rewriteContent, rewrittenItems, isRewriting, updateRewrittenItem } =
+    useRewriteStore();
 
   // Mock content for demo with proper typing
   const fetchedContent: FetchItem[] =
@@ -102,6 +103,22 @@ const ContentRewrite: React.FC = () => {
           abstract: rewrittenItems[0].abstract || "",
         } as FetchItem)
       : null;
+
+  // 处理内容更新
+  const handleContentUpdate = (
+    updatedContent: string,
+    updatedImages: string[]
+  ) => {
+    if (!rewrittenItem) return;
+
+    // 使用store的updateRewrittenItem方法更新内容
+    updateRewrittenItem(rewrittenItems[0].id, {
+      content: updatedContent,
+      generatedImages: updatedImages,
+    });
+
+    toast.success("内容和图片已更新");
+  };
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -228,6 +245,7 @@ const ContentRewrite: React.FC = () => {
                               images={rewrittenItem.generatedImages}
                               abstract={rewrittenItem.abstract}
                               onRewrite={handleRewrite}
+                              onContentChange={handleContentUpdate}
                             />
                           ) : (
                             <>

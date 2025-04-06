@@ -4,6 +4,9 @@ import * as htmlToImage from 'html-to-image';
  * 分页文档服务 - 处理文本分页和图片生成
  */
 export class DocumentPaginationService {
+  // 定义手动分页符标记
+  public static readonly PAGE_BREAK_MARKER = '---PAGE_BREAK---';
+
   /**
    * 将文本内容分割成多个页面
    * @param content 要分割的文本内容
@@ -11,6 +14,38 @@ export class DocumentPaginationService {
    * @returns 分页后的内容数组
    */
   splitContentIntoPages(content: string, charsPerPage: number = 1000): string[] {
+    // 首先检查是否包含手动分页符
+    if (content.includes(DocumentPaginationService.PAGE_BREAK_MARKER)) {
+      console.log('检测到手动分页符，按手动分页符和自动分页逻辑结合进行分页');
+      
+      // 按手动分页符拆分内容得到大块
+      const sections = content.split(DocumentPaginationService.PAGE_BREAK_MARKER);
+      const pages: string[] = [];
+      
+      // 对每个大块应用自动分页逻辑
+      for (const section of sections) {
+        const trimmedSection = section.trim();
+        if (!trimmedSection) continue; // 跳过空部分
+        
+        // 将每一部分按照自动分页逻辑拆分
+        const sectionPages = this.autoSplitContentIntoPages(trimmedSection, charsPerPage);
+        pages.push(...sectionPages);
+      }
+      
+      return pages;
+    }
+
+    // 如果没有手动分页符，直接使用自动分页逻辑
+    return this.autoSplitContentIntoPages(content, charsPerPage);
+  }
+  
+  /**
+   * 自动将内容分页的内部实现方法
+   * @param content 要分割的文本内容
+   * @param charsPerPage 每页字符数上限
+   * @returns 分页后的内容数组
+   */
+  private autoSplitContentIntoPages(content: string, charsPerPage: number): string[] {
     // 按换行符分割获取段落
     const paragraphs = content.split(/\n+/);
     const pages: string[] = [];
@@ -344,6 +379,21 @@ export class DocumentPaginationService {
   }
 
   /**
+   * 根据新的分页内容重新生成图片
+   * @param contentPages 手动分页后的内容数组
+   * @param originalImages 原始图片数组（如果有些页面未改变，可以重用对应的图片）
+   * @returns 更新后的图片数组
+   */
+  async regenerateImages(contentPages: string[], originalImages: string[] = []): Promise<string[]> {
+    console.log(`开始重新生成分页图片，共${contentPages.length}页`);
+    
+    // 创建新的图片数组
+    const updatedImages = await this.generatePageImages(contentPages);
+    
+    return updatedImages;
+  }
+
+  /**
    * 处理内容并生成分页图片
    * @param content 原始文本内容
    * @returns 包含分页内容和图片的对象
@@ -353,6 +403,24 @@ export class DocumentPaginationService {
     const contentPages = this.splitContentIntoPages(content);
     // 生成图片
     const images = await this.generatePageImages(contentPages);
+    
+    return {
+      contentPages,
+      images
+    };
+  }
+
+  /**
+   * 根据更新后的内容重新处理分页和图片
+   * @param content 更新后的内容
+   * @param originalImages 原始图片数组
+   * @returns 包含更新后的分页内容和图片的对象
+   */
+  async reprocessContent(content: string, originalImages: string[] = []): Promise<{contentPages: string[], images: string[]}> {
+    // 分页
+    const contentPages = this.splitContentIntoPages(content);
+    // 重新生成图片
+    const images = await this.regenerateImages(contentPages, originalImages);
     
     return {
       contentPages,
