@@ -1,4 +1,5 @@
 import * as htmlToImage from 'html-to-image';
+import { useWatermarkStore } from '../stores/watermarkStore';
 
 /**
  * 分页文档服务 - 处理文本分页和图片生成
@@ -394,19 +395,248 @@ export class DocumentPaginationService {
   }
 
   /**
+   * 获取当前水印配置
+   * @returns 当前应用的水印配置
+   */
+  getWatermarkConfig() {
+    // 从 store 获取当前水印配置
+    const watermarkSettings = useWatermarkStore.getState().watermarkSettings;
+    
+    console.log('获取水印配置:', watermarkSettings);
+    
+    // 将水印配置映射到 addWatermark 方法需要的格式
+    return {
+      text: watermarkSettings.text || '小红书内容助手', // 使用水印文字
+      opacity: (watermarkSettings.opacity || 30) / 100, // 将百分比转换为0-1范围
+      fontSize: watermarkSettings.size || 18, // 文字大小
+      fontColor: watermarkSettings.color || '#ff4d6d', // 文字颜色
+      position: 'center' as const, // 水印位置
+      rotate: -30, // 旋转角度
+      density: watermarkSettings.density || 3, // 水印密度
+    };
+  }
+
+  /**
+   * 为图片添加水印
+   * @param imageDataUrl 原始图片的data URL
+   * @param watermarkConfig 水印配置信息
+   * @returns 添加水印后的图片data URL
+   */
+  async addWatermark(
+    imageDataUrl: string, 
+    watermarkConfig: {
+      text?: string; // 水印文字
+      image?: string; // 水印图片URL
+      opacity?: number; // 水印透明度 (0-1)
+      position?: 'center' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'; // 水印位置
+      fontSize?: number; // 文字大小
+      fontColor?: string; // 文字颜色
+      rotate?: number; // 旋转角度
+      density?: number; // 水印密度 (值越大，水印越密集)
+    } = {}
+  ): Promise<string> {
+    return new Promise((resolve) => {
+      try {
+        // 默认水印配置
+        const config = {
+          text: watermarkConfig.text || '',
+          image: watermarkConfig.image || '',
+          opacity: watermarkConfig.opacity !== undefined ? watermarkConfig.opacity : 0.3,
+          position: watermarkConfig.position || 'center',
+          fontSize: watermarkConfig.fontSize || 24,
+          fontColor: watermarkConfig.fontColor || 'rgba(0, 0, 0, 0.7)',
+          rotate: watermarkConfig.rotate !== undefined ? watermarkConfig.rotate : -30,
+          density: watermarkConfig.density !== undefined ? watermarkConfig.density : 3
+        };
+
+        console.log('应用水印配置:', config);
+
+        // 创建图像对象来加载原始图片
+        const img = new Image();
+        img.onload = () => {
+          // 创建Canvas并绘制原图
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            console.error('Canvas 2D context 创建失败');
+            resolve(imageDataUrl); // 如果失败返回原图
+            return;
+          }
+          
+          // 绘制原图
+          ctx.drawImage(img, 0, 0);
+          
+          // 应用水印
+          ctx.save();
+          
+          // 设置透明度
+          ctx.globalAlpha = config.opacity;
+          
+          if (config.text) {
+            // 设置文字样式
+            ctx.font = `${config.fontSize}px Arial, "Microsoft YaHei"`;
+            ctx.fillStyle = config.fontColor;
+            
+            // 计算文字大致宽度 (粗略估计)
+            const textWidth = ctx.measureText(config.text).width;
+            const textHeight = config.fontSize * 1.5; // 粗略估计文字高度
+            
+            // 基础间距 - 值越大，水印越稀疏
+            const baseSpacingX = 300;
+            const baseSpacingY = 200;
+            
+            // 根据密度调整间距 - 密度越大，间距越小
+            // 将密度(1-5)映射到间距系数(1-0.5)
+            const densityFactor = 1 - ((config.density - 1) / 10); // 1->1, 3->0.8, 5->0.6
+            
+            // 计算最终间距
+            const spacingX = baseSpacingX * densityFactor;
+            const spacingY = baseSpacingY * densityFactor;
+            
+            console.log(`水印密度: ${config.density}, 间距系数: ${densityFactor}, 间距: ${spacingX}x${spacingY}`);
+            
+            // 旋转角度（弧度）
+            const rotateRad = (config.rotate * Math.PI) / 180;
+            
+            // 计算重复次数
+            const cols = Math.ceil(canvas.width / spacingX) + 1; // 确保覆盖边缘
+            const rows = Math.ceil(canvas.height / spacingY) + 1;
+            
+            // 起始偏移，使水印更均匀分布
+            const offsetX = spacingX / 2;
+            const offsetY = spacingY / 2;
+            
+            // 绘制平铺水印
+            for (let row = 0; row < rows; row++) {
+              for (let col = 0; col < cols; col++) {
+                const x = offsetX + col * spacingX;
+                const y = offsetY + row * spacingY;
+                
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(rotateRad);
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(config.text, 0, 0);
+                ctx.restore();
+              }
+            }
+          }
+          
+          // 图片水印
+          if (config.image) {
+            const watermarkImg = new Image();
+            watermarkImg.onload = () => {
+              // 计算水印图片的绘制尺寸（确保不会太大）
+              const maxSize = 100;
+              const scale = Math.min(maxSize / watermarkImg.width, maxSize / watermarkImg.height);
+              const width = watermarkImg.width * scale;
+              const height = watermarkImg.height * scale;
+              
+              // 基础间距 - 值越大，水印越稀疏
+              const baseSpacingX = 400;
+              const baseSpacingY = 300;
+              
+              // 根据密度调整间距 - 密度越大，间距越小
+              const densityFactor = 1 - ((config.density - 1) / 10); // 1->1, 3->0.8, 5->0.6
+              
+              // 计算最终间距
+              const spacingX = baseSpacingX * densityFactor;
+              const spacingY = baseSpacingY * densityFactor;
+              
+              // 旋转角度（弧度）
+              const rotateRad = (config.rotate * Math.PI) / 180;
+              
+              // 计算重复次数
+              const cols = Math.ceil(canvas.width / spacingX) + 1;
+              const rows = Math.ceil(canvas.height / spacingY) + 1;
+              
+              // 起始偏移，使水印更均匀分布
+              const offsetX = spacingX / 2;
+              const offsetY = spacingY / 2;
+              
+              // 绘制平铺图片水印
+              for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                  const x = offsetX + col * spacingX;
+                  const y = offsetY + row * spacingY;
+                  
+                  ctx.save();
+                  ctx.translate(x, y);
+                  ctx.rotate(rotateRad);
+                  ctx.drawImage(watermarkImg, -width / 2, -height / 2, width, height);
+                  ctx.restore();
+                }
+              }
+              
+              ctx.restore();
+              resolve(canvas.toDataURL('image/png'));
+            };
+            
+            watermarkImg.onerror = () => {
+              console.error('水印图片加载失败');
+              ctx.restore();
+              resolve(canvas.toDataURL('image/png')); // 仅应用文字水印
+            };
+            
+            watermarkImg.src = config.image;
+          } else {
+            // 没有图片水印时直接完成
+            ctx.restore();
+            resolve(canvas.toDataURL('image/png'));
+          }
+        };
+        
+        img.onerror = () => {
+          console.error('原始图片加载失败');
+          resolve(imageDataUrl); // 出错时返回原图
+        };
+        
+        img.src = imageDataUrl;
+      } catch (error) {
+        console.error('添加水印过程出错:', error);
+        resolve(imageDataUrl); // 出错时返回原图
+      }
+    });
+  }
+
+  /**
    * 处理内容并生成分页图片
    * @param content 原始文本内容
+   * @param watermarkConfig 水印配置（可选，如果不提供则使用应用内配置）
    * @returns 包含分页内容和图片的对象
    */
-  async processContent(content: string): Promise<{contentPages: string[], images: string[]}> {
+  async processContent(
+    content: string, 
+    watermarkConfig?: {
+      text?: string;
+      image?: string;
+      opacity?: number;
+      position?: 'center' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
+      fontSize?: number;
+      fontColor?: string;
+      rotate?: number;
+    }
+  ): Promise<{contentPages: string[], images: string[]}> {
     // 分页
     const contentPages = this.splitContentIntoPages(content);
     // 生成图片
     const images = await this.generatePageImages(contentPages);
     
+    // 获取水印配置 - 如果没有传入则使用系统默认配置
+    const config = watermarkConfig || this.getWatermarkConfig();
+    
+    console.log('正在为图片添加水印...', config);
+    const watermarkedImages = await Promise.all(
+      images.map(image => this.addWatermark(image, config))
+    );
+    
     return {
       contentPages,
-      images
+      images: watermarkedImages
     };
   }
 
@@ -414,17 +644,38 @@ export class DocumentPaginationService {
    * 根据更新后的内容重新处理分页和图片
    * @param content 更新后的内容
    * @param originalImages 原始图片数组
+   * @param watermarkConfig 水印配置（可选，如果不提供则使用应用内配置）
    * @returns 包含更新后的分页内容和图片的对象
    */
-  async reprocessContent(content: string, originalImages: string[] = []): Promise<{contentPages: string[], images: string[]}> {
+  async reprocessContent(
+    content: string, 
+    originalImages: string[] = [],
+    watermarkConfig?: {
+      text?: string;
+      image?: string;
+      opacity?: number;
+      position?: 'center' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
+      fontSize?: number;
+      fontColor?: string;
+      rotate?: number;
+    }
+  ): Promise<{contentPages: string[], images: string[]}> {
     // 分页
     const contentPages = this.splitContentIntoPages(content);
     // 重新生成图片
     const images = await this.regenerateImages(contentPages, originalImages);
     
+    // 获取水印配置 - 如果没有传入则使用系统默认配置
+    const config = watermarkConfig || this.getWatermarkConfig();
+    
+    console.log('正在为图片添加水印...', config);
+    const watermarkedImages = await Promise.all(
+      images.map(image => this.addWatermark(image, config))
+    );
+    
     return {
       contentPages,
-      images
+      images: watermarkedImages
     };
   }
 }
