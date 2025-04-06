@@ -449,7 +449,7 @@ export class DocumentPaginationService {
           density: watermarkConfig.density !== undefined ? watermarkConfig.density : 3
         };
 
-        console.log('应用水印配置:', config);
+        console.log('实际水印配置:', JSON.stringify(config, null, 2));
 
         // 创建图像对象来加载原始图片
         const img = new Image();
@@ -476,13 +476,10 @@ export class DocumentPaginationService {
           ctx.globalAlpha = config.opacity;
           
           if (config.text) {
-            // 设置文字样式
+            // 设置字体和颜色
             ctx.font = `${config.fontSize}px Arial, "Microsoft YaHei"`;
             ctx.fillStyle = config.fontColor;
-            
-            // 计算文字大致宽度 (粗略估计)
-            const textWidth = ctx.measureText(config.text).width;
-            const textHeight = config.fontSize * 1.5; // 粗略估计文字高度
+            console.log(`设置字体: ${ctx.font}, 颜色: ${config.fontColor}, 透明度: ${config.opacity}`);
             
             // 基础间距 - 值越大，水印越稀疏
             const baseSpacingX = 300;
@@ -496,7 +493,7 @@ export class DocumentPaginationService {
             const spacingX = baseSpacingX * densityFactor;
             const spacingY = baseSpacingY * densityFactor;
             
-            console.log(`水印密度: ${config.density}, 间距系数: ${densityFactor}, 间距: ${spacingX}x${spacingY}`);
+            console.log(`生成水印网格 - 密度:${config.density}, 系数:${densityFactor.toFixed(2)}, 间距:${spacingX.toFixed(0)}x${spacingY.toFixed(0)}, 画布尺寸:${canvas.width}x${canvas.height}`);
             
             // 旋转角度（弧度）
             const rotateRad = (config.rotate * Math.PI) / 180;
@@ -504,6 +501,8 @@ export class DocumentPaginationService {
             // 计算重复次数
             const cols = Math.ceil(canvas.width / spacingX) + 1; // 确保覆盖边缘
             const rows = Math.ceil(canvas.height / spacingY) + 1;
+            
+            console.log(`水印网格大小: ${cols}x${rows}，字体大小: ${config.fontSize}`);
             
             // 起始偏移，使水印更均匀分布
             const offsetX = spacingX / 2;
