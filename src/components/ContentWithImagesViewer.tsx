@@ -61,7 +61,10 @@ const ContentWithImagesViewer: React.FC<ContentWithImagesViewerProps> = ({
   // 渲染分页符组件
   const renderPageBreak = (key: string | number) => {
     return (
-      <div key={`pagebreak-${key}`} className="w-full my-6 relative">
+      <div
+        key={`pagebreak-${key}`}
+        className="w-full my-6 relative  select-none"
+      >
         <div className="relative flex items-center">
           <div className="flex-grow h-0 border-t border-dashed border-gray-300"></div>
           <div className="mx-2 px-2 bg-white text-xs text-pink-400 flex items-center">
