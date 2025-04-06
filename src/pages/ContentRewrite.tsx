@@ -23,8 +23,13 @@ const ContentRewrite: React.FC = () => {
   const [activeTab, setActiveTab] = useState("original");
 
   const { fetchedItems } = useFetchStore();
-  const { rewriteContent, rewrittenItems, isRewriting, updateRewrittenItem } =
-    useRewriteStore();
+  const {
+    rewriteContent,
+    rewrittenItems,
+    updateRewrittenItem,
+    getRewrittenItemByOriginalId,
+    isItemRewriting,
+  } = useRewriteStore();
 
   // Mock content for demo with proper typing
   const fetchedContent: FetchItem[] =
@@ -64,6 +69,16 @@ const ContentRewrite: React.FC = () => {
           },
         ];
 
+  const handleSelectContent = (id: number) => {
+    // 设置选中的内容
+    setSelectedContent(id);
+
+    // 如果这个ID的内容已经有改写结果，则切换到改写结果标签页
+    // 否则切换到原始内容标签页
+    const rewrittenItem = getRewrittenItemByOriginalId(id);
+    setActiveTab(rewrittenItem ? "rewritten" : "original");
+  };
+
   const handleRewrite = () => {
     if (selectedContent === null) {
       toast.error("请先选择要改写的内容");
@@ -77,6 +92,12 @@ const ContentRewrite: React.FC = () => {
 
     rewriteContent(contentToRewrite);
     toast.success("内容正在改写中...");
+
+    // 添加一个计时器，当改写开始后，等待一小段时间再切换到改写结果标签
+    // 这样用户会感觉更流畅，知道改写正在进行
+    setTimeout(() => {
+      setActiveTab("rewritten");
+    }, 500);
   };
 
   const copyToClipboard = (text: string) => {
@@ -90,17 +111,26 @@ const ContentRewrite: React.FC = () => {
       ? fetchedContent.find((item) => item.id === selectedContent)
       : null;
 
-  // Find the rewritten version of the selected content
-  const rewrittenItem =
-    rewrittenItems.length > 0 && selectedItem
+  // 检查当前选中的内容是否正在改写中
+  const isCurrentItemRewriting =
+    selectedContent !== null && isItemRewriting(selectedContent);
+
+  // 获取当前选中内容的改写结果
+  const currentRewrittenItem =
+    selectedContent !== null
+      ? getRewrittenItemByOriginalId(selectedContent)
+      : undefined;
+
+  // 组装完整的改写结果项用于显示
+  const rewrittenItemToDisplay =
+    currentRewrittenItem && selectedItem
       ? ({
-          ...rewrittenItems[0],
+          ...currentRewrittenItem,
           url: selectedItem.url,
           status: "success" as const,
           images: selectedItem.images || [],
           author: selectedItem.author || "",
           publishTime: selectedItem.publishTime || "",
-          abstract: rewrittenItems[0].abstract || "",
         } as FetchItem)
       : null;
 
@@ -109,10 +139,10 @@ const ContentRewrite: React.FC = () => {
     updatedContent: string,
     updatedImages: string[]
   ) => {
-    if (!rewrittenItem) return;
+    if (!currentRewrittenItem) return;
 
     // 使用store的updateRewrittenItem方法更新内容
-    updateRewrittenItem(rewrittenItems[0].id, {
+    updateRewrittenItem(currentRewrittenItem.id, {
       content: updatedContent,
       generatedImages: updatedImages,
     });
@@ -152,33 +182,51 @@ const ContentRewrite: React.FC = () => {
               </h2>
 
               <div className="space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
-                {fetchedContent.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`p-4 rounded-lg cursor-pointer transition-all duration-200 ${
-                      selectedContent === item.id
-                        ? "bg-pink-50 border-2 border-pink-500"
-                        : "bg-gray-50 hover:bg-gray-100 border-2 border-transparent"
-                    }`}
-                    onClick={() => setSelectedContent(item.id)}
-                  >
-                    <h3 className="font-medium text-gray-800 mb-1 truncate">
-                      {item.title}
-                    </h3>
-                    <p className="text-gray-500 text-sm truncate">
-                      {item.content?.substring(0, 60)}...
-                    </p>
-                  </div>
-                ))}
+                {fetchedContent.map((item) => {
+                  // 检查每个item是否有改写结果或正在改写中
+                  const hasRewritten = !!getRewrittenItemByOriginalId(item.id);
+                  const isRewriting = isItemRewriting(item.id);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-4 rounded-lg cursor-pointer transition-all duration-200 relative ${
+                        selectedContent === item.id
+                          ? "bg-pink-50 border-2 border-pink-500"
+                          : "bg-gray-50 hover:bg-gray-100 border-2 border-transparent"
+                      }`}
+                      onClick={() => handleSelectContent(item.id)}
+                    >
+                      <h3 className="font-medium text-gray-800 mb-1 truncate">
+                        {item.title}
+                      </h3>
+                      <p className="text-gray-500 text-sm truncate">
+                        {item.content?.substring(0, 60)}...
+                      </p>
+
+                      {/* 显示改写状态标记 */}
+                      {isRewriting && (
+                        <span className="absolute right-2 top-2 px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                          改写中...
+                        </span>
+                      )}
+                      {hasRewritten && !isRewriting && (
+                        <span className="absolute right-2 top-2 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                          已改写
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-6">
                 <button
                   onClick={handleRewrite}
-                  disabled={isRewriting || selectedContent === null}
+                  disabled={isCurrentItemRewriting || selectedContent === null}
                   className="w-full px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium rounded-lg shadow hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isRewriting ? "改写中..." : "开始智能改写"}
+                  {isCurrentItemRewriting ? "改写中..." : "开始智能改写"}
                 </button>
               </div>
             </div>
@@ -235,29 +283,31 @@ const ContentRewrite: React.FC = () => {
 
                   {activeTab === "rewritten" && (
                     <div className="prose max-w-none">
-                      {rewrittenItem ? (
+                      {rewrittenItemToDisplay ? (
                         <div className="relative">
-                          {rewrittenItem.contentPages &&
-                          rewrittenItem.generatedImages ? (
+                          {rewrittenItemToDisplay.contentPages &&
+                          rewrittenItemToDisplay.generatedImages ? (
                             <ContentWithImagesViewer
-                              title={rewrittenItem.title}
-                              content={rewrittenItem.content}
-                              images={rewrittenItem.generatedImages}
-                              abstract={rewrittenItem.abstract}
+                              title={rewrittenItemToDisplay.title}
+                              content={rewrittenItemToDisplay.content}
+                              images={rewrittenItemToDisplay.generatedImages}
+                              abstract={rewrittenItemToDisplay.abstract}
                               onRewrite={handleRewrite}
                               onContentChange={handleContentUpdate}
                             />
                           ) : (
                             <>
                               <NoteDisplayComponent
-                                note={rewrittenItem}
+                                note={rewrittenItemToDisplay}
                                 showFullContent={true}
                               />
                               <div className="absolute top-4 right-4 flex space-x-2">
                                 <button
                                   onClick={() => {
-                                    if (rewrittenItem.content)
-                                      copyToClipboard(rewrittenItem.content);
+                                    if (rewrittenItemToDisplay.content)
+                                      copyToClipboard(
+                                        rewrittenItemToDisplay.content
+                                      );
                                   }}
                                   className="p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-pink-600 transition-colors duration-200"
                                   title="复制内容"
@@ -266,7 +316,7 @@ const ContentRewrite: React.FC = () => {
                                 </button>
                                 <button
                                   onClick={handleRewrite}
-                                  disabled={isRewriting}
+                                  disabled={isCurrentItemRewriting}
                                   className="p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-pink-600 transition-colors duration-200"
                                   title="重新改写"
                                 >
@@ -280,7 +330,7 @@ const ContentRewrite: React.FC = () => {
                         <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                           <FiEdit size={48} className="mb-4 opacity-30" />
                           <p className="text-center">
-                            {isRewriting
+                            {isCurrentItemRewriting
                               ? "内容改写中..."
                               : '点击"开始智能改写"生成改写内容'}
                           </p>

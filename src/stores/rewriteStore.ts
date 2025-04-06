@@ -13,6 +13,7 @@ export type RewriteSettings = {
 
 export type RewrittenItem = {
   id: number;
+  originalItemId: number; // 原始笔记的ID
   title: string;
   content: string;
   abstract?: string; 
@@ -21,14 +22,21 @@ export type RewrittenItem = {
   contentPages?: string[]; // 分页内容
 };
 
+// 改写状态映射：ID -> 状态
+export type RewriteStatusMap = {
+  [originalItemId: number]: boolean; // true表示正在改写，false表示改写完成
+};
+
 type RewriteStore = {
   rewriteSettings: RewriteSettings;
   rewrittenItems: RewrittenItem[];
-  isRewriting: boolean;
+  rewriteStatusMap: RewriteStatusMap; // 记录每个笔记的改写状态
   updateSettings: (settings: Partial<RewriteSettings>) => void;
   rewriteContent: (item: FetchItem) => void;
   clearRewrittenItems: () => void;
   updateRewrittenItem: (id: number, updatedItem: Partial<RewrittenItem>) => void;
+  getRewrittenItemByOriginalId: (originalItemId: number) => RewrittenItem | undefined;
+  isItemRewriting: (originalItemId: number) => boolean;
 };
 
 export const useRewriteStore = create<RewriteStore>((set, get) => ({
@@ -40,7 +48,7 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
     batchCount: 1
   },
   rewrittenItems: [],
-  isRewriting: false,
+  rewriteStatusMap: {},
   
   updateSettings: (settings) => {
     set((state) => ({
@@ -51,7 +59,13 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
   rewriteContent: async (item) => {
     if (!item.content) return;
     
-    set({ isRewriting: true });
+    // 更新当前笔记的改写状态为"改写中"
+    set((state) => ({
+      rewriteStatusMap: { 
+        ...state.rewriteStatusMap, 
+        [item.id]: true 
+      }
+    }));
     
     try {
       const { batchCount } = get().rewriteSettings;
@@ -81,6 +95,7 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
           if (rewrittenNote) {
             newItems.push({
               id: Date.now() + i,
+              originalItemId: item.id, // 保存原始笔记的ID
               title: rewrittenNote.title,
               content: rewrittenNote.content,
               abstract: rewrittenNote.abstract,
@@ -99,18 +114,38 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
         }
       }
       
-      set((state) => ({
-        rewrittenItems: [...newItems, ...state.rewrittenItems],
-        isRewriting: false
-      }));
+      // 更新改写结果，并将当前笔记的改写状态设为完成
+      set((state) => {
+        // 移除原有的同一笔记的改写结果
+        const filteredItems = state.rewrittenItems.filter(
+          item => !newItems.some(newItem => newItem.originalItemId === item.originalItemId)
+        );
+        
+        return {
+          rewrittenItems: [...newItems, ...filteredItems],
+          rewriteStatusMap: { 
+            ...state.rewriteStatusMap, 
+            [item.id]: false // 改写完成
+          }
+        };
+      });
     } catch (error) {
       console.error('改写内容时出错:', error);
-      set({ isRewriting: false });
+      // 更新当前笔记的改写状态为"完成"（即使出错）
+      set((state) => ({
+        rewriteStatusMap: { 
+          ...state.rewriteStatusMap, 
+          [item.id]: false 
+        }
+      }));
     }
   },
   
   clearRewrittenItems: () => {
-    set({ rewrittenItems: [] });
+    set({ 
+      rewrittenItems: [],
+      rewriteStatusMap: {}
+    });
   },
 
   // 更新指定ID的改写内容
@@ -120,5 +155,15 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
         item.id === id ? { ...item, ...updatedItem } : item
       )
     }));
+  },
+  
+  // 根据原始笔记ID获取对应的改写结果
+  getRewrittenItemByOriginalId: (originalItemId: number) => {
+    return get().rewrittenItems.find(item => item.originalItemId === originalItemId);
+  },
+  
+  // 检查指定原始笔记ID是否正在改写中
+  isItemRewriting: (originalItemId: number) => {
+    return !!get().rewriteStatusMap[originalItemId];
   }
 }));
