@@ -1,6 +1,7 @@
 import { CozeAPI } from '@coze/api';
 import { ScrapedNote } from './RedBookScraperService';
 import * as htmlToImage from 'html-to-image';
+import { documentPaginationService } from './DocumentPaginationService';
 
 // 定义改写后的笔记接口
 export interface RewrittenNote {
@@ -348,19 +349,21 @@ class RedBookRewriteService {
         throw new Error(`改写处理失败: code=${parsedData.code}`);
       }
       
-      // 分页处理：将内容分割成多个页面
-      const contentPages = this.splitContentIntoPages(parsedData.content);
-      parsedData.contentPages = contentPages;
-      
       try {
-        // 生成图片
-        console.log(`开始为${contentPages.length}页内容生成图片...`);
-        const generatedImages = await this.generateImagesFromText(contentPages);
-        parsedData.generatedImages = generatedImages;
-        console.log(`成功生成${generatedImages.length}张图片`);
+        // 使用DocumentPaginationService处理内容，生成文档风格的分页及图片
+        console.log(`开始处理文档分页及图片生成...`);
+        const processResult = await documentPaginationService.processContent(parsedData.content);
+        
+        // 保存分页内容和生成的图片到结果中
+        parsedData.contentPages = processResult.contentPages;
+        parsedData.generatedImages = processResult.images;
+        
+        console.log(`处理完成，共生成${processResult.contentPages.length}页内容和${processResult.images.length}张图片`);
       } catch (error) {
-        console.error('生成图片时出错:', error);
+        console.error('生成文档图片时出错:', error);
         // 出错时不影响整体流程，继续返回已有内容
+        // 使用原有方法进行简单分页（不生成图片）
+        parsedData.contentPages = this.splitContentIntoPages(parsedData.content);
       }
       
       return parsedData;

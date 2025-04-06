@@ -15,6 +15,8 @@ export type FetchItem = {
   author?: string;
   publishTime?: string;
   commentList?: CommentItem[];
+  contentPages?: string[];      // 分页内容
+  generatedImages?: string[];   // 生成的图片
 };
 
 export type CommentItem = {

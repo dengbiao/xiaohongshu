@@ -6,12 +6,15 @@ import {
   FiRotateCw,
   FiCheck,
   FiSettings,
+  FiFileText,
+  FiImage,
 } from "react-icons/fi";
 import toast from "react-hot-toast";
 import { useRewriteStore } from "../stores/rewriteStore";
 import { useFetchStore, FetchItem } from "../stores/fetchStore";
 import RewriteSettingsModal from "../components/RewriteSettingsModal";
 import NoteDisplayComponent from "../components/NoteDisplayComponent";
+import ContentWithImagesViewer from "../components/ContentWithImagesViewer";
 import { ScrapedNote } from "../services/RedBookScraperService";
 
 const ContentRewrite: React.FC = () => {
@@ -217,30 +220,43 @@ const ContentRewrite: React.FC = () => {
                     <div className="prose max-w-none">
                       {rewrittenItem ? (
                         <div className="relative">
-                          <NoteDisplayComponent
-                            note={rewrittenItem}
-                            showFullContent={true}
-                          />
-                          <div className="absolute top-4 right-4 flex space-x-2">
-                            <button
-                              onClick={() => {
-                                if (rewrittenItem.content)
-                                  copyToClipboard(rewrittenItem.content);
-                              }}
-                              className="p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-pink-600 transition-colors duration-200"
-                              title="复制内容"
-                            >
-                              <FiCopy size={18} />
-                            </button>
-                            <button
-                              onClick={handleRewrite}
-                              disabled={isRewriting}
-                              className="p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-pink-600 transition-colors duration-200"
-                              title="重新改写"
-                            >
-                              <FiRotateCw size={18} />
-                            </button>
-                          </div>
+                          {rewrittenItem.contentPages &&
+                          rewrittenItem.generatedImages ? (
+                            <ContentWithImagesViewer
+                              title={rewrittenItem.title}
+                              content={rewrittenItem.content}
+                              images={rewrittenItem.generatedImages}
+                              abstract={rewrittenItem.abstract}
+                              onRewrite={handleRewrite}
+                            />
+                          ) : (
+                            <>
+                              <NoteDisplayComponent
+                                note={rewrittenItem}
+                                showFullContent={true}
+                              />
+                              <div className="absolute top-4 right-4 flex space-x-2">
+                                <button
+                                  onClick={() => {
+                                    if (rewrittenItem.content)
+                                      copyToClipboard(rewrittenItem.content);
+                                  }}
+                                  className="p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-pink-600 transition-colors duration-200"
+                                  title="复制内容"
+                                >
+                                  <FiCopy size={18} />
+                                </button>
+                                <button
+                                  onClick={handleRewrite}
+                                  disabled={isRewriting}
+                                  className="p-2 bg-white rounded-full shadow-md text-gray-500 hover:text-pink-600 transition-colors duration-200"
+                                  title="重新改写"
+                                >
+                                  <FiRotateCw size={18} />
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center py-12 text-gray-500">
