@@ -312,7 +312,9 @@ const ContentRewrite: React.FC = () => {
                   disabled={selectedContent === null}
                   className="w-full px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white font-medium rounded-lg shadow hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isCurrentItemRewriting ? "再次改写" : "开始智能改写"}
+                  {currentRewrittenVersions.length > 0
+                    ? "再次改写"
+                    : "开始智能改写"}
                 </button>
               </div>
             </div>
@@ -516,7 +518,7 @@ const ContentRewrite: React.FC = () => {
                         <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                           <FiEdit size={48} className="mb-4 opacity-30" />
                           <p className="text-center">
-                            {isCurrentItemRewriting
+                            {currentRewrittenVersions.length > 0
                               ? "内容改写中..."
                               : '点击"开始智能改写"生成改写内容'}
                           </p>

@@ -54,6 +54,9 @@ type RewriteStore = {
   isItemRewriting: (originalItemId: number) => boolean;
 };
 
+// 添加生成随机id的工具函数
+const generateRandomId = () => Math.floor(Math.random() * 1000000000);
+
 export const useRewriteStore = create<RewriteStore>((set, get) => ({
   rewriteSettings: {
     style: 'professional',
@@ -84,105 +87,140 @@ export const useRewriteStore = create<RewriteStore>((set, get) => ({
       .filter(rewrittenItem => rewrittenItem.originalItemId === originalId)
       .map(rewrittenItem => rewrittenItem.version);
       
-    // 如果没有版本，则从1开始，否则取最大版本号+1
-    const newVersion = existingVersions.length > 0 
-      ? Math.max(...existingVersions) + 1 
-      : 1;
+    // 获取批量改写设置
+    const { batchCount } = get().rewriteSettings;
+    let rewriteCount = batchCount;
+    if (existingVersions.length > 0) {
+      // 如果已经有改写版本，则只改写1个版本
+      rewriteCount = 1;
+    }
     
-    // 创建一个"改写中"状态的版本
-    const inProgressItem: RewrittenItem = {
-      id: Date.now(),
-      originalItemId: item.id,
-      title: item.title,
-      content: item.content || '正在改写中...',
-      abstract: (item.content || '').substring(0, 150) + "...",
-      version: newVersion,
-      createdAt: Date.now(),
-      status: "rewriting"
-    };
-
-    // 立即添加改写中的版本
-    set((state) => {
-      return {
-        rewrittenItems: [...state.rewrittenItems, inProgressItem],
-        rewriteStatusMap: { 
-          ...state.rewriteStatusMap, 
-          [item.id]: "rewriting" 
-        }
-      };
-    });
-
-    try {
-      // 准备原始内容数据
-      const noteToRewrite: NoteToRewrite = {
-        id: item.id,
+    // 批量创建改写任务
+    for (let i = 0; i < rewriteCount; i++) {
+      // 如果没有版本，则从1开始，否则取最大版本号+1
+      const newVersion = existingVersions.length > 0 
+        ? Math.max(...existingVersions) + 1
+        : i + 1;
+      
+      // 创建一个带随机id的"改写中"状态的版本
+      const inProgressItem: RewrittenItem = {
+        id: generateRandomId(),
+        originalItemId: item.id,
         title: item.title,
-        content: item.content || '',
-        author: item.author || '',
-        url: item.url || '',
-        images: item.images || []
+        content: item.content || '正在改写中...',
+        abstract: (item.content || '').substring(0, 150) + "...",
+        version: newVersion,
+        createdAt: Date.now(),
+        status: "rewriting"
       };
 
-      // 在rewriteStore中获取设置并直接在服务中使用
-      const settings = get().rewriteSettings;
+      // 添加到现有版本列表，更新状态映射
+      existingVersions.push(newVersion);
       
-      // 执行改写API调用，始终使用原始内容进行改写
-      const result = await redBookRewriteService.rewriteNote({
-        id: String(noteToRewrite.id),
-        title: noteToRewrite.title,
-        content: noteToRewrite.content,
-        coverImage: noteToRewrite.images?.[0] || '',
-        images: noteToRewrite.images || [],
-        imagesText: item.imagesText || [],
-        likes: 0,
-        comments: 0,
-        authorName: noteToRewrite.author || '',
-        authorAvatar: '',
-        publishTime: new Date().toISOString().split('T')[0]
-      });
-      
-      // 生成摘要和内容页面
-      const abstract = result.content.substring(0, 150) + "...";
-      const contentPages = result.content
-        .split("\n\n")
-        .filter((paragraph) => paragraph.trim().length > 0);
-
-      // 更新刚才创建的改写中的版本
+      // 立即添加改写中的版本
       set((state) => {
         return {
-          rewrittenItems: state.rewrittenItems.map(item => 
-            item.id === inProgressItem.id 
-              ? {
-                  ...item,
-                  title: result.title,
-                  content: result.content,
-                  abstract,
-                  contentPages,
-                  generatedImages: result.generatedImages || [],
-                  status: "success"
-                }
-              : item
-          ),
+          rewrittenItems: [...state.rewrittenItems, inProgressItem],
           rewriteStatusMap: { 
             ...state.rewriteStatusMap, 
-            [item.id]: "success" 
+            [item.id]: "rewriting" 
           }
         };
       });
-    } catch (error) {
-      console.error('改写错误:', error);
-      // 更新为错误状态
-      set((state) => ({
-        rewrittenItems: state.rewrittenItems.map(item => 
-          item.id === inProgressItem.id 
-            ? { ...item, status: "error" }
-            : item
-        ),
-        rewriteStatusMap: { 
-          ...state.rewriteStatusMap, 
-          [item.id]: "error" 
+
+      // 为每个版本启动异步改写任务
+      (async (currentItem) => {
+        try {
+          // 准备原始内容数据
+          const noteToRewrite: NoteToRewrite = {
+            id: item.id,
+            title: item.title,
+            content: item.content || '',
+            author: item.author || '',
+            url: item.url || '',
+            images: item.images || []
+          };
+  
+          // 在rewriteStore中获取设置并直接在服务中使用
+          const settings = get().rewriteSettings;
+          
+          // 执行改写API调用，始终使用原始内容进行改写
+          const result = await redBookRewriteService.rewriteNote({
+            id: String(noteToRewrite.id),
+            title: noteToRewrite.title,
+            content: noteToRewrite.content,
+            coverImage: noteToRewrite.images?.[0] || '',
+            images: noteToRewrite.images || [],
+            imagesText: item.imagesText || [],
+            likes: 0,
+            comments: 0,
+            authorName: noteToRewrite.author || '',
+            authorAvatar: '',
+            publishTime: new Date().toISOString().split('T')[0]
+          });
+          
+          // 生成摘要和内容页面
+          const abstract = result.content.substring(0, 150) + "...";
+          const contentPages = result.content
+            .split("\n\n")
+            .filter((paragraph) => paragraph.trim().length > 0);
+  
+          // 更新刚才创建的改写中的版本
+          set((state) => {
+            // 检查是否有其他正在改写的版本
+            const otherRewritingItems = state.rewrittenItems.some(item => 
+              item.originalItemId === originalId && 
+              item.id !== currentItem.id && 
+              item.status === "rewriting"
+            );
+            
+            return {
+              rewrittenItems: state.rewrittenItems.map(item => 
+                item.id === currentItem.id 
+                  ? {
+                      ...item,
+                      title: result.title,
+                      content: result.content,
+                      abstract,
+                      contentPages,
+                      generatedImages: result.generatedImages || [],
+                      status: "success"
+                    }
+                  : item
+              ),
+              // 只有当没有其他正在改写的版本时，才将状态更新为success
+              rewriteStatusMap: { 
+                ...state.rewriteStatusMap, 
+                ...(otherRewritingItems ? {} : { [originalId]: "success" })
+              }
+            };
+          });
+        } catch (error) {
+          console.error('改写错误:', error);
+          // 更新为错误状态
+          set((state) => {
+            // 检查是否有其他正在改写的版本
+            const otherRewritingItems = state.rewrittenItems.some(item => 
+              item.originalItemId === originalId && 
+              item.id !== currentItem.id && 
+              item.status === "rewriting"
+            );
+            
+            return {
+              rewrittenItems: state.rewrittenItems.map(item => 
+                item.id === currentItem.id 
+                  ? { ...item, status: "error" }
+                  : item
+              ),
+              // 只有当没有其他正在改写的版本时，才将状态更新为error
+              rewriteStatusMap: { 
+                ...state.rewriteStatusMap, 
+                ...(otherRewritingItems ? {} : { [originalId]: "error" })
+              }
+            };
+          });
         }
-      }));
+      })(inProgressItem);
     }
   },
 
